@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="jobstitch">
+  <title>jobstitch</title>
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#21498C"/>
+      <stop offset="1" stop-color="#0F2756"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect width="512" height="512" rx="114"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect width="512" height="512" fill="url(#ink)"/>
+    <rect x="60" y="96" width="180" height="320" rx="18" fill="#F5F2EA"/>
+    <rect x="272" y="96" width="180" height="320" rx="18" fill="#F5F2EA"/>
+    <g fill="#A4B4CE">
+      <rect x="86" y="139" width="92" height="14" rx="7"/>
+      <rect x="334" y="139" width="92" height="14" rx="7"/>
+      <rect x="86" y="183" width="76" height="14" rx="7"/>
+      <rect x="346" y="183" width="80" height="14" rx="7" fill="#FFC978"/>
+      <rect x="86" y="227" width="86" height="14" rx="7"/>
+      <rect x="360" y="227" width="66" height="14" rx="7"/>
+      <rect x="86" y="271" width="60" height="14" rx="7"/>
+      <rect x="338" y="271" width="88" height="14" rx="7" fill="#FFC978"/>
+      <rect x="86" y="315" width="82" height="14" rx="7"/>
+      <rect x="370" y="315" width="56" height="14" rx="7"/>
+      <rect x="86" y="359" width="50" height="14" rx="7"/>
+      <rect x="350" y="359" width="76" height="14" rx="7"/>
+    </g>
+    <g fill="none" stroke="#FF9A3C" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="198,116 314,151 198,186"/>
+      <polyline points="198,221 314,256 198,291"/>
+      <polyline points="198,326 314,361 198,396"/>
+    </g>
+  </g>
+</svg>

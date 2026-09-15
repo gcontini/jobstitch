@@ -1,0 +1,112 @@
+# jobstitch model configuration
+# =============================
+# jobstitch calls exactly three models, one per job:
+#
+#   summary    JD detection, JD analysis and the cover letter
+#   cv         CV writing and the content review
+#   highlight  the **bold**/*italic* keyword pass over the validated CV
+#
+# Each table below is self-contained — endpoint, credentials, model name and
+# generation settings — and nothing about a provider is baked into the code.
+# Any OpenAI-compatible /chat/completions endpoint works: point `base_url` at
+# it and set `model` to whatever it serves. The `model` values here are
+# examples; change them to the ones your account has access to.
+#
+# A model whose `api_key_env` variable is empty borrows the endpoint (and model
+# name) of one that is configured, and says so at startup — so a single
+# provider key is enough to run the whole pipeline.
+
+[defaults]
+timeout_seconds = 600
+
+
+# --- Per-model keys ----------------------------------------------------------
+# model           (required) model name sent to the endpoint
+# api_key_env     (required) env var holding the API key
+# base_url_env    (required) env var holding the endpoint URL
+# temperature     sampling temperature; omit to use the provider default
+# max_tokens      overrides [defaults].max_tokens for this model; omitted here
+#                 and in [defaults] means max_tokens is left out of the request
+#                 entirely and the provider's own default applies. Set it when
+#                 the endpoint caps completion tokens (e.g. DashScope's
+#                 max_tokens range is [1, 8192] for some models)
+# reasoning_effort  "low" | "medium" | "high"; omit for the provider default
+# thinking        "auto" (send nothing — the provider decides, and the right
+#                 value for endpoints that reject a thinking switch, e.g.
+#                 OpenAI) | "on" (enable_thinking, plus `thinking_budget` when
+#                 set) | "off" (force reasoning off)
+# thinking_budget cap on reasoning tokens per call; needs thinking = "on"
+# web_search      true when the endpoint runs web search server-side
+# structured_output  "json_schema_strict" (endpoint validates the schema and
+#                   rejects anything off it) | "json_schema" (schema sent as a
+#                   hint) | "json_object" (JSON but no schema) | "none".
+#                   jobstitch also restates the schema in the prompt and
+#                   validates every reply, so "json_object" still works.
+# Note: reasoning_effort and thinking_budget are mutually exclusive — a
+# declared thinking_budget always wins and reasoning_effort is dropped.
+
+# Mid-size: decides whether the clipboard holds a job description, extracts
+# the JD analysis, and writes the cover letter. The only model allowed to run
+# web research (on the employer, for a direct posting from a named company).
+[models.summary]
+model             = "qwen-plus"
+api_key_env       = "DASHSCOPE_API_KEY"
+base_url_env      = "DASHSCOPE_BASE_URL"
+structured_output = "json_object"
+temperature       = 0.1
+thinking          = "on"
+reasoning_effort  = "low"
+# DashScope runs web search server-side via extra_body {"enable_search": true}.
+web_search        = true
+
+# The large one: writes the tailored CV and reviews it. Thinking is worth
+# paying for here, capped so a long reasoning chain cannot eat the output
+# budget and truncate the JSON.
+[models.cv]
+model             = "qwen-max"
+api_key_env       = "DASHSCOPE_API_KEY"
+base_url_env      = "DASHSCOPE_BASE_URL"
+structured_output = "json_object"
+thinking          = "on"
+thinking_budget   = 6000
+
+# Mid-size, no thinking: the highlighter only inserts Markdown markers into
+# already-validated JSON. Letting a hybrid-reasoning model think about that
+# burns the whole output budget on reasoning tokens and returns truncated JSON.
+[models.highlight]
+model             = "qwen-plus"
+api_key_env       = "DASHSCOPE_API_KEY"
+base_url_env      = "DASHSCOPE_BASE_URL"
+structured_output = "json_object"
+temperature       = 0.1
+thinking          = "off"
+
+
+# --- Other providers ---------------------------------------------------------
+# Copy the endpoint keys into the tables above (there are only ever three
+# models — these are settings to paste, not extra models to declare).
+#
+# OpenAI — no thinking switch in the request body, so leave thinking = "auto"
+# and let reasoning_effort do the work:
+#   model             = "gpt-4o"
+#   api_key_env       = "OPENAI_API_KEY"
+#   base_url_env      = "OPENAI_BASE_URL"
+#   structured_output = "json_schema"
+#   thinking          = "auto"
+#
+# DeepSeek — reasoning_effort and thinking_budget can't be sent together,
+# so declare only the budget and it alone controls thinking:
+#   model             = "deepseek-chat"
+#   api_key_env       = "DEEPSEEK_API_KEY"
+#   base_url_env      = "DEEPSEEK_BASE_URL"
+#   structured_output = "json_object"
+#   thinking          = "on"
+#   thinking_budget   = 6000
+#
+# A local model needs no key, but `api_key_env` is required — point it at a
+# variable holding any placeholder string (see .env.example):
+#   model             = "llama3.1"
+#   api_key_env       = "OLLAMA_API_KEY"
+#   base_url_env      = "OLLAMA_BASE_URL"
+#   structured_output = "json_object"
+#   thinking          = "auto"

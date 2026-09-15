@@ -1,0 +1,123 @@
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb,amsfonts,textcomp}
+\usepackage{color}
+\definecolor{darkblue}{RGB}{15,39,86}
+\usepackage{array}
+\usepackage{hhline}
+\usepackage{fontawesome5}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, urlcolor=darkblue, linkcolor=darkblue, citecolor=darkblue, filecolor=darkblue, pdftitle=CV}
+\usepackage[pdftex]{graphicx}
+% Text styles
+\newcommand\textstyleStrongEmphasis[1]{\textbf{#1}}
+\newcommand\textstyleEmphasis[1]{\textit{#1}}
+% Outline numbering
+\setcounter{secnumdepth}{0}
+% List styles
+\newcommand\liststyleListi{%
+\renewcommand\labelitemi{{\textbullet}}
+\renewcommand\labelitemii{{\textbullet}}
+\renewcommand\labelitemiii{{\textbullet}}
+\renewcommand\labelitemiv{{\textbullet}}
+}
+% Page layout (geometry)
+\setlength\voffset{-1in}
+\setlength\hoffset{-1in}
+\setlength\topmargin{2.54cm}
+\setlength\oddsidemargin{2.54cm}
+\setlength\textheight{24.619999cm}
+\setlength\textwidth{15.920999cm}
+\setlength\footskip{0.0cm}
+\setlength\headheight{0cm}
+\setlength\headsep{0cm}
+% Footnote rule
+\setlength{\skip\footins}{0.119cm}
+\renewcommand\footnoterule{\vspace*{-0.018cm}\setlength\leftskip{0pt}\setlength\rightskip{0pt plus 1fil}\noindent\textcolor{black}{\rule{0.25\columnwidth}{0.018cm}}\vspace*{0.101cm}}
+% Pages styles
+\makeatletter
+\newcommand\ps@Standard{
+  \renewcommand\@oddhead{}
+  \renewcommand\@evenhead{}
+  \renewcommand\@oddfoot{}
+  \renewcommand\@evenfoot{}
+  \renewcommand\thepage{\arabic{page}}
+}
+\makeatother
+\pagestyle{Standard}
+\title{CV}
+\author{\VAR{ name }}
+\date{2026-08-13}
+\begin{document}
+\noindent
+\colorbox{darkblue}{\parbox{\dimexpr\linewidth-2\fboxsep}{%
+  \textcolor{white}{\Large\scshape \VAR{ name }}\\[2pt]
+  \textcolor{white}{\large\itshape \VAR{ job_title }}}}
+
+%##\vspace{0.6em}
+
+\begin{center}
+  \textcolor{darkblue}{\faEnvelope}\hspace{0.35em}\href{mailto:\VAR{ email }}{\VAR{ email }}\quad
+  \textcolor{darkblue}{\faPhone}\hspace{0.35em}\VAR{ phone }\quad
+  \textcolor{darkblue}{\faLinkedin}\hspace{0.35em}\href{\VAR{ linkedin }}{\VAR{ linkedin | replace("https://www.", "") }}
+\end{center}
+\textcolor{darkblue}{\subsection{Profile}}
+{\VAR{ summary }}
+
+\textcolor{darkblue}{\subsection{Skills}}
+\noindent
+{\BLOCK{ for skill in skills }\VAR{ skill }\BLOCK{ if not loop.last } {\textbullet} \BLOCK{ endif }\BLOCK{ endfor }}
+
+\textcolor{darkblue}{\subsection{Work Experience}}
+\BLOCK{ for exp in experiences }
+\subsubsection[\VAR{ exp.title } / \VAR{ exp.company } (\VAR{ exp.location })]{\textstyleStrongEmphasis{\VAR{ exp.title } / \VAR{ exp.company }} \textmd{(\VAR{ exp.location })}}
+\BLOCK{ if exp.project_name }
+\paragraph[\VAR{ exp.dates }, \VAR{ exp.project_name }]{\textstyleEmphasis{\VAR{ exp.dates }, }\textstyleStrongEmphasis{\VAR{ exp.project_name }}}
+\BLOCK{ else }
+\paragraph[\VAR{ exp.dates }]{\textstyleEmphasis{\VAR{ exp.dates }}}
+\BLOCK{ endif }
+\liststyleListi
+\begin{itemize}
+\BLOCK{ for bullet in exp.bullet_points }
+\item {\VAR{ bullet }}
+\BLOCK{ endfor }
+\end{itemize}
+\BLOCK{ endfor }
+\textcolor{darkblue}{\subsection{Languages}}
+{\VAR{ languages }}
+
+\textcolor{darkblue}{\subsection{Professional Certifications}}
+
+\begin{tabular}{@{}l@{\hspace{0.5em}}c@{\hspace{0.6em}}l@{}}
+%# Not templated yet: edit these rows to your own certifications. They are
+%# also listed in candidate_profile.json, where the LLM reads them as context.
+March 2025 & : & Certified Kubernetes Administrator (CKA)\\
+September 2023 & : & AWS Solutions Architect -- Associate\\
+January 2022 & : & Google Cloud Professional Cloud Architect\\
+June 2019 & : & DELE B2 (Spanish language proficiency)\\
+\end{tabular}
+
+\textcolor{darkblue}{\subsection{Education:}}
+{\VAR{ education }}
+
+\bigskip
+
+\noindent{\VAR{ location }, \VAR{ generation_date }}
+
+\begin{flushright}
+\includegraphics[width=5.278cm,height=1.36cm]{candidate_signature.png}
+\end{flushright}
+
+
+\bigskip
+
+
+\bigskip
+
+
+\bigskip
+\noindent{\small\textcolor[rgb]{0.5,0.5,0.5}{I hereby consent to the processing of the data I provided in this CV according to UE regulation 2016/679}}
+\end{document}

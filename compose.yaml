@@ -1,0 +1,70 @@
+# jobstitch, both processes, one mounted folder.
+#
+#     cp .env.example .env            # then fill in one provider's API key
+#     docker compose run --rm jobstitch
+#
+# `compose run` (not `up`) because clipboard-import prompts on the terminal
+# and wants a real one attached. `docker compose up -d` works too, for the
+# watcher alone — see JOBSTITCH_CLIPBOARD below.
+services:
+  jobstitch:
+    build: .
+    image: jobstitch:latest
+    init: true            # reap the background watcher when the container stops
+    stdin_open: true      # clipboard-import reads your answers from the terminal
+    tty: true
+
+    # Over SSH with X11 forwarding, DISPLAY is a TCP port on the *host's*
+    # loopback (localhost:10.0 is port 6010 there) rather than the socket in
+    # /tmp/.X11-unix — and a bridged container's own loopback is not the
+    # host's, so the display is simply unreachable and the clipboard reads as
+    # permanently empty. Put JOBSTITCH_NETWORK=host in .env for that case, so
+    # the container shares the host's network namespace. It is needed
+    # together with the cookie in JOBSTITCH_XAUTHORITY below, not instead of
+    # it: with only one of the two, xclip still cannot open the display.
+    # Leave both unset for a local session, where DISPLAY is :0 and the
+    # mounted socket is the whole story.
+    network_mode: "${JOBSTITCH_NETWORK:-bridge}"
+
+    # Provider keys and any tuning, read at launch — never baked into the image.
+    env_file:
+      - .env
+    environment:
+      # Clipboard access over X11. On Wayland, comment this out and uncomment
+      # the Wayland block below instead.
+      DISPLAY: "${DISPLAY:-}"
+      # The MIT magic cookie that authorizes this container against that
+      # display — required by every SSH-forwarded display, and by most local
+      # ones. Set JOBSTITCH_XAUTHORITY in .env to the absolute path of your
+      # cookie file (compose does not expand ~), usually:
+      #     JOBSTITCH_XAUTHORITY=/home/you/.Xauthority
+      # It is mounted read-only at /tmp/.Xauthority; this line points the X
+      # client at it, and stays empty when you have not set it.
+      XAUTHORITY: "${JOBSTITCH_XAUTHORITY:+/tmp/.Xauthority}"
+      # Set to "off" to run the watcher alone (no clipboard on this machine).
+      JOBSTITCH_CLIPBOARD: "${JOBSTITCH_CLIPBOARD:-on}"
+      # Set to "off" to stop tracking generated CVs in applications.xlsx.
+      JOBSTITCH_XLSX: "${JOBSTITCH_XLSX:-on}"
+      # WAYLAND_DISPLAY: "${WAYLAND_DISPLAY:-}"
+      # XDG_RUNTIME_DIR: /tmp/wayland
+
+    volumes:
+      # The one folder you mount. It holds applications_cv/ (the workspace)
+      # and resources/ (templates, prompts, models.toml, your CV data), both
+      # created and seeded on first launch.
+      - "${JOBSTITCH_DATA:-./jobstitch-data}:/data"
+      # X11 socket, for the clipboard.
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # The cookie file named by JOBSTITCH_XAUTHORITY. /dev/null is the
+      # "not set" placeholder: a path that always exists and carries no
+      # cookie, so an unset variable can never make docker create a stray
+      # directory where your real ~/.Xauthority belongs.
+      - "${JOBSTITCH_XAUTHORITY:-/dev/null}:/tmp/.Xauthority:ro"
+      # Wayland socket, for the clipboard (pairs with the block above).
+      # - "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}:/tmp/wayland/${WAYLAND_DISPLAY}"
+
+    # So that the CVs and the spreadsheet in the mounted folder belong to you
+    # and not to root. Put your own ids in .env:
+    #     JOBSTITCH_UID=$(id -u)
+    #     JOBSTITCH_GID=$(id -g)
+    user: "${JOBSTITCH_UID:-1000}:${JOBSTITCH_GID:-1000}"

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="jobstitch">
+  <title>jobstitch</title>
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#21498C"/>
+      <stop offset="1" stop-color="#0F2756"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect width="512" height="512" rx="114"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect width="512" height="512" fill="url(#ink)"/>
+    <rect x="60" y="96" width="168" height="320" rx="18" fill="#F5F2EA"/>
+    <rect x="284" y="96" width="168" height="320" rx="18" fill="#F5F2EA"/>
+    <g fill="none" stroke="#FF9A3C" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="176,121 336,171 176,221"/>
+      <polyline points="176,291 336,341 176,391"/>
+    </g>
+  </g>
+</svg>

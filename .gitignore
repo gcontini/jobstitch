@@ -1,0 +1,28 @@
+# --- Secrets ----------------------------------------------------------------
+.env
+
+# --- Workspace --------------------------------------------------------------
+# JOBSTITCH_HOME defaults to ~/jobstitch, outside the repo. These entries only
+# matter if you point it back inside the checkout.
+/workspace/
+/incoming/
+/working/
+/error/
+/resume/
+/applications.xlsx
+
+# --- Docker -----------------------------------------------------------------
+# Default mount point for compose.yaml (override with JOBSTITCH_DATA).
+/jobstitch_data/
+
+/jobstitch-data/*
+!/jobstitch-data/.gitkeep
+
+# --- Python -----------------------------------------------------------------
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/

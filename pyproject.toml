@@ -1,0 +1,54 @@
+[project]
+name = "jobstitch"
+version = "0.1.0"
+description = "Turn a job description into a tailored, two-page LaTeX CV and a cover letter, using any OpenAI-compatible model."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["cv", "resume", "latex", "llm", "job-search", "cover-letter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+    "Topic :: Text Processing :: Markup :: LaTeX",
+]
+dependencies = [
+    # Templating the LaTeX CV.
+    "Jinja2",
+    # Any OpenAI-compatible endpoint (see resources/models.toml).
+    "openai",
+    # Structured data contracts: TailoredCVData, JDAnalysis.
+    "pydantic",
+    # Page counting on the compiled PDF.
+    "pypdf",
+    # Application tracking spreadsheet.
+    "openpyxl",
+    # Clipboard JD intake (jd_sources.clipboard_import).
+    "pyperclip",
+    # .env secrets.
+    "python-dotenv",
+]
+
+[project.urls]
+Homepage = "https://github.com/gcontini/jobstitch"
+Issues = "https://github.com/gcontini/jobstitch/issues"
+
+# Console scripts, installed into .venv/bin by `uv sync`.
+[project.scripts]
+job-watcher = "jobstitch.job_watcher:cli"
+clipboard-import = "jd_sources.clipboard_import:run_intake_loop"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

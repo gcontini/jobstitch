@@ -1,0 +1,21 @@
+# The image needs six things; everything else stays out of the build context.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src
+!resources
+!docker
+
+# Your data and secrets are never baked into the image — they live in the
+# folder you mount at /data. These are the git-ignored personal files, listed
+# again here because a build context is not a git checkout.
+.env
+resources/candidate_profile.json
+resources/candidate_data.json
+resources/pers_preferences.md
+resources/candidate_signature.png
+
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info

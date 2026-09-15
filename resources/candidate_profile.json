@@ -1,0 +1,82 @@
+{
+  "name": "Jordan Rivera",
+  "email": "jordan.rivera@example.com",
+  "phone": "+1 555 0142",
+  "linkedin": "https://www.linkedin.com/in/example-jordan-rivera",
+  "writing_style": "C1 English, polished, direct and highly structured. Plain vocabulary over ornate phrasing.",
+  "summaries": [
+    "Results-oriented <<job_title>> with 12+ years building and operating distributed systems for regulated industries. Comfortable owning a design end to end: gathering requirements, weighing vendor proposals, and staying accountable for the system once it is in production. Known for diagnosing problems other people have already given up on, and for explaining the fix to both engineers and the people paying for it.",
+    "Hands-on <<job_title>> working across platform engineering and system integration. Broad rather than narrow: strong enough in infrastructure, data and application code to find the real bottleneck instead of the convenient one. Used to multi-vendor environments where the hard part is the boundary between teams, not the technology."
+  ],
+  "skills": [
+    "Distributed systems design", "Kubernetes", "Terraform", "AWS", "Google Cloud",
+    "PostgreSQL", "Python", "Go", "Java",
+    "CI/CD (GitHub Actions, Jenkins)", "Observability (Prometheus, Grafana)",
+    "Requirements gathering", "Vendor management", "Stakeholder communication",
+    "Incident response", "Performance profiling", "Technical writing",
+    "Mentoring", "Spanish (professional)"
+  ],
+  "certifications": [
+    {"date": "March 2025", "name": "Certified Kubernetes Administrator (CKA)"},
+    {"date": "September 2023", "name": "AWS Solutions Architect -- Associate"},
+    {"date": "January 2022", "name": "Google Cloud Professional Cloud Architect"},
+    {"date": "June 2019", "name": "DELE B2 (Spanish language proficiency)"}
+  ],
+  "education": "MSc in Computer Science, Example State University (June 2009).",
+  "experiences": [
+    {
+      "title": "Principal Platform Engineer",
+      "company": "Northwind Logistics",
+      "location": "Lisbon, Portugal",
+      "dates": "March 2022 -- Present",
+      "context": "Freight tracking platform -- 40M events/day",
+      "bullet_points": [
+        "Owned the architecture of the event ingestion platform handling roughly 40 million tracking events per day across 14 carrier integrations.",
+        "Cut median ingestion latency from 900ms to 120ms by replacing a synchronous validation chain with a partitioned Kafka topology and back-pressure-aware consumers.",
+        "When a carrier changed its API without notice and broke ingestion for six hours, I led the incident, shipped a compatibility shim the same day, and wrote the contract-testing suite that has caught four similar changes since.",
+        "As the platform's technical owner, my responsibility covered the on-call rotation design, the error budget policy, and the quarterly capacity plan.",
+        "Migrated 60+ services from hand-rolled Helm charts to a shared Terraform module set, removing about 11,000 lines of duplicated configuration.",
+        "Mentored four engineers through their first production designs; two now own services outright."
+      ]
+    },
+    {
+      "title": "Senior Site Reliability Engineer",
+      "company": "Meridian Health Systems",
+      "location": "Barcelona, Spain",
+      "dates": "August 2018 -- February 2022",
+      "context": "Clinical records platform (HIPAA/GDPR)",
+      "bullet_points": [
+        "Designed the multi-region failover for a clinical records system with a contractual RTO of 30 minutes, then proved it twice a year in full-scale disaster recovery exercises.",
+        "Facing an audit finding on privileged access, I rebuilt the IAM model around least privilege, separating production from staging across 9 teams without stopping delivery.",
+        "Zero unplanned downtime was recorded in the 18 months after I rewrote the deployment pipeline to do progressive rollouts with automatic rollback on SLO breach.",
+        "Reduced cloud spend by 34% in one quarter by right-sizing stateful workloads and moving cold clinical archives to object storage with lifecycle policies.",
+        "Acted as the engineering point of contact during two external security audits, producing the evidence pack and the remediation plan."
+      ]
+    },
+    {
+      "title": "Backend Engineer",
+      "company": "Cobalt Analytics",
+      "location": "Berlin, Germany",
+      "dates": "May 2014 -- July 2018",
+      "context": "",
+      "bullet_points": [
+        "Built the query engine behind the customer-facing analytics product, in Go, serving ad-hoc aggregations over roughly 2TB of columnar data.",
+        "To eliminate a recurring class of nightly batch failures, I introduced idempotent job semantics and a replay tool, which took the weekly on-call page count from eleven to under two.",
+        "The ingestion library I maintained was adopted by three other teams; I kept its API stable across two major internal migrations.",
+        "Profiling work I led on the hot path removed a 40% CPU overhead caused by redundant deserialization."
+      ]
+    },
+    {
+      "title": "Software Engineer",
+      "company": "Harbourline Systems",
+      "location": "Dublin, Ireland",
+      "dates": "September 2009 -- April 2014",
+      "context": "Payments integration",
+      "bullet_points": [
+        "Developed and maintained the Java library that integrated the company's payment product with six national banking networks.",
+        "Introduced automated integration testing against bank sandboxes, replacing a manual pre-release checklist that had taken two days per release.",
+        "Championed the move from nightly builds to continuous integration, which I piloted on my own team before it was adopted company-wide."
+      ]
+    }
+  ]
+}
