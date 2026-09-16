@@ -15,8 +15,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -31,7 +31,7 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Classic builder, as everywhere else: the Dockerfile must stay
       # buildable without BuildKit.
       - name: Build the server image
@@ -44,7 +44,7 @@ jobs:
           for i in $(seq 1 30); do
             curl -fsS localhost:8080/healthz && break || sleep 2
           done
-          curl -fsS localhost:8080/healthz | grep '"pdflatex": true'
+          curl -fsS localhost:8080/healthz | grep '"pdflatex":true'
 
   client:
     # PyInstaller does not cross-compile: each binary is built on its own OS.
@@ -58,8 +58,8 @@ jobs:
             asset: jobstitch-windows-x86_64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -68,7 +68,7 @@ jobs:
       # PyInstaller re-analyses every dependency from scratch otherwise; the
       # key carries the spec and the lock because either one invalidates it.
       - name: Cache the PyInstaller analysis
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build
           key: pyinstaller-${{ matrix.os }}-${{ hashFiles('uv.lock', 'client/packaging/jobstitch.spec') }}
@@ -134,7 +134,7 @@ jobs:
           sed -i 's|(\.\./server/README\.md)|(https://github.com/${{ github.repository }}/blob/main/server/README.md)|' package/README.md
         shell: bash
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
           path: package/
