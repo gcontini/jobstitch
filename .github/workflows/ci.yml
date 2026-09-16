@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push makes the previous run's artifacts obsolete; do not pay for them.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # The renderer tests compile a real CV; without these they skip
+      # themselves and the golden render would be the only thing checked.
+      - name: Install the LaTeX toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends
+             texlive-latex-base texlive-fonts-extra cm-super
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Classic builder, as everywhere else: the Dockerfile must stay
+      # buildable without BuildKit.
+      - name: Build the server image
+        run: DOCKER_BUILDKIT=0 docker build -f server/Dockerfile -t jobstitch-server .
+      - name: Start it and check it is healthy
+        run: |
+          docker run -d --name api -p 8080:8080 \
+            -e DASHSCOPE_API_KEY=ci -e DASHSCOPE_BASE_URL=http://invalid/v1 \
+            jobstitch-server
+          for i in $(seq 1 30); do
+            curl -fsS localhost:8080/healthz && break || sleep 2
+          done
+          curl -fsS localhost:8080/healthz | grep '"pdflatex": true'
+
+  client:
+    # PyInstaller does not cross-compile: each binary is built on its own OS.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: jobstitch-linux-x86_64
+          - os: windows-latest
+            asset: jobstitch-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen
+
+      # PyInstaller re-analyses every dependency from scratch otherwise; the
+      # key carries the spec and the lock because either one invalidates it.
+      - name: Cache the PyInstaller analysis
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: pyinstaller-${{ matrix.os }}-${{ hashFiles('uv.lock', 'client/packaging/jobstitch.spec') }}
+
+      - name: Build the executable
+        run: uv run --with pyinstaller pyinstaller --noconfirm client/packaging/jobstitch.spec
+
+      - name: Check it runs
+        run: ./dist/jobstitch --help
+        shell: bash
+
+      # The real question is not "does it start" but "does it talk to a
+      # server". The server from this same checkout is enough, and cheaper
+      # than the image, which the `image` job builds anyway.
+      - name: Install a minimal LaTeX for the smoke test
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends
+             texlive-latex-base
+
+      - name: Render a PDF through a running server
+        if: runner.os == 'Linux'
+        env:
+          DASHSCOPE_API_KEY: ci
+          DASHSCOPE_BASE_URL: http://invalid/v1
+          PORT: "8080"
+        run: |
+          set -eux
+          uv run jobstitch-api &
+          for i in $(seq 1 30); do
+            curl -fsS localhost:8080/healthz && break || sleep 2
+          done
+          printf '%s\n' \
+            '\documentclass{article}' \
+            '\begin{document}Hello from CI.\end{document}' > smoke.tex
+          # No model is reachable here, and render needs none: this is
+          # multipart in, envelope out, pdflatex, base64 back, PDF on disk.
+          ./dist/jobstitch -v --server http://localhost:8080 render smoke.tex
+          head -c 4 smoke.pdf | grep -q '%PDF'
+          rm -f smoke.tex smoke.pdf
+        shell: bash
+
+      # What gets downloaded: the binary plus the things you need beside it
+      # to run it. See client/README.md in the same folder.
+      - name: Assemble the download
+        run: |
+          set -eux
+          mkdir -p package/examples
+          cp dist/jobstitch* package/
+          cp client/README.md package/
+          cp -r examples/candidate package/examples/
+          cp examples/posting.txt package/examples/
+          printf '%s\n' \
+            '# Rename to jobstitch.toml, next to the executable.' \
+            'server_url = "http://localhost:8080"' \
+            '# token = "the-bearer-token"' \
+            'cover_letter = "no"' \
+            '# debug = true    # fetch the server log after every call' \
+            '# verbose = true  # print each call and its request id' \
+            > package/jobstitch.toml.example
+          # The README's links are written for the repository; in the
+          # download, examples/ sits beside it and there is no server/.
+          sed -i 's|(\.\./examples/candidate)|(examples/candidate)|' package/README.md
+          sed -i 's|(\.\./server/README\.md)|(https://github.com/${{ github.repository }}/blob/main/server/README.md)|' package/README.md
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: package/
+          retention-days: 30
+          if-no-files-found: error

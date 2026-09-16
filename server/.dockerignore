@@ -1,0 +1,20 @@
+# The image needs the two packages it builds from and nothing else.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!contracts/pyproject.toml
+!contracts/src
+!server/pyproject.toml
+!server/src
+!client/pyproject.toml
+!server/docker
+
+# Secrets and personal data never enter the build context. The server holds
+# no candidate data by design — it arrives with each request — so these are
+# belt and braces.
+.env
+examples
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info

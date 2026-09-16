@@ -1,0 +1,18 @@
+[project]
+name = "jobstitch-contracts"
+version = "0.2.0"
+description = "Wire format shared by the jobstitch server and client: CV/JD models and the response envelope."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    # The only dependency, deliberately: these models are imported by a
+    # FastAPI server and by a PyInstaller-frozen CLI, and must stay cheap.
+    "pydantic",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

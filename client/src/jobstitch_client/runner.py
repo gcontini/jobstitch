@@ -1,0 +1,301 @@
+"""One job, start to finish — the only place the order of steps is written.
+
+    detect -> analyze -> confirm -> write CV -> render -> letter -> deliver
+
+Every collaborator is injected: the API, the folder layout, the question
+asked before spending anything, the spreadsheet. That is what lets the four
+modes share this and what lets the tests run it with no server and no
+terminal.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+from jobstitch_contracts import CVDocument, JDAnalysis, static_jd_guess
+
+from .api import JobstitchApi, JobstitchError, read_bytes, read_text
+from .config import LETTER_PROMPT, Config
+from .joblog import JobLog
+from .sources import JDCandidate
+from .tracking import Tracker
+from .ui import Confirmer
+from .workspace import (
+    ANALYSIS_FILENAME,
+    LETTER_FILENAME,
+    LOG_FILENAME,
+    Artifacts,
+    Workspace,
+)
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """What became of one posting."""
+
+    status: str  # delivered | discarded | rejected | failed | quit
+    message: str
+    path: Optional[Path] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "delivered"
+
+
+class JobRunner:
+    """Runs one posting through the pipeline and files the result."""
+
+    def __init__(
+        self,
+        *,
+        api: JobstitchApi,
+        workspace: Workspace,
+        config: Config,
+        confirmer: Confirmer,
+        tracker: Tracker,
+    ) -> None:
+        self.api = api
+        self.workspace = workspace
+        self.config = config
+        self.confirmer = confirmer
+        self.tracker = tracker
+
+    # --- entry points -------------------------------------------------------
+    def handle(self, candidate: JDCandidate) -> Outcome:
+        """A new posting: detect, analyze, ask, produce."""
+        log = JobLog()
+        try:
+            detection = self._detect(candidate, log)
+            if not detection:
+                return self._reject(candidate, log)
+
+            analysis, job_dir = self._analyze(candidate, log)
+            decision = self.confirmer.confirm(analysis)
+            if decision.quit:
+                log.step("⏹ stopped before submitting")
+                self._finish_log(job_dir, log)
+                return Outcome("quit", "stopped by the user", self.workspace.discard(job_dir))
+            if not decision.submit:
+                log.step("⏭ skipped")
+                self._finish_log(job_dir, log)
+                return Outcome("discarded", "skipped", self.workspace.discard(job_dir))
+
+            if decision.url:
+                analysis.posting_url = decision.url
+                self._write_analysis(job_dir, analysis)
+            return self._produce(job_dir, candidate.text, analysis, log)
+        except JobstitchError as exc:
+            # Nothing has a job folder yet, so the claimed file itself is what
+            # gets filed under error/ — never left behind in working/.
+            return self._failed(log, exc, candidate=candidate)
+
+    def resume(self, job_dir: Path) -> Outcome:
+        """A folder left in ``working/``: it was analyzed, so pick up there."""
+        log = JobLog()
+        log.step(f"♻ resuming {job_dir.name}")
+        try:
+            analysis = JDAnalysis.model_validate_json(
+                (job_dir / ANALYSIS_FILENAME).read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError) as exc:
+            log.step(f"✗ cannot read {ANALYSIS_FILENAME}: {exc}")
+            self._finish_log(job_dir, log)
+            return Outcome("failed", str(exc), self.workspace.to_error(job_dir))
+
+        jd_text = self._stored_jd(job_dir)
+        decision = self.confirmer.confirm(analysis)
+        if not decision.submit:
+            self._finish_log(job_dir, log)
+            return Outcome("discarded", "skipped", self.workspace.discard(job_dir))
+        try:
+            return self._produce(job_dir, jd_text, analysis, log)
+        except JobstitchError as exc:
+            return self._failed(log, exc, job_dir=job_dir)
+
+    # --- the one place a call is made ---------------------------------------
+    def _call(self, log: JobLog, call):
+        """Make one API call and, with ``--debug``, keep what the server said.
+
+        Every step goes through here, so "fetch the log too" is one decision
+        in one place rather than five.
+        """
+        envelope = call()
+        if self.config.debug:
+            self._fetch_logs(log, envelope.request_id)
+        return envelope.data
+
+    def _fetch_logs(self, log: JobLog, request_id: Optional[str]) -> None:
+        """Pull one request's server-side log into this job's ``log.log``."""
+        if not request_id:
+            return
+        try:
+            log.server(request_id, self.api.logs(request_id).data.entries)
+        except JobstitchError as exc:
+            log.step(f"⚠ could not fetch the server log for {request_id}: {exc}")
+
+    # --- steps --------------------------------------------------------------
+    def _detect(self, candidate: JDCandidate, log: JobLog) -> bool:
+        """The free check first, the server's second."""
+        if not static_jd_guess(candidate.text):
+            log.step(f"✗ not a job description ({len(candidate.text)} chars, nothing sent)")
+            return False
+        detection = self._call(log, lambda: self.api.detect(candidate.text))
+        if not detection.is_job_description:
+            log.step("✗ not a job description")
+            return False
+        log.step(f"✓ job description ({len(candidate.text)} chars)")
+        return True
+
+    def _analyze(self, candidate: JDCandidate, log: JobLog) -> tuple[JDAnalysis, Path]:
+        log.step("📊 analyzing the posting...")
+        analysis = self._call(log, lambda: self.api.analyze(
+            candidate.text,
+            profile=self.config.require("candidate_profile.json").read_bytes(),
+            preferences=self.config.require("pers_preferences.md").read_text(encoding="utf-8"),
+            temperature=self.config.temperature,
+        ))
+
+        job_dir = self.workspace.open_job(analysis.company_name, analysis.job_title)
+        target = job_dir / candidate.filename
+        if candidate.origin is not None and candidate.origin.exists():
+            candidate.origin.rename(target)  # keeps the name you gave it
+        else:
+            target.write_text(candidate.text, encoding="utf-8")
+        self._write_analysis(job_dir, analysis)
+        log.step(f"📥 {job_dir.name}")
+        return analysis, job_dir
+
+    def _produce(
+        self, job_dir: Path, jd_text: str, analysis: JDAnalysis, log: JobLog
+    ) -> Outcome:
+        """Everything that costs money, in order."""
+        try:
+            if self.config.cover_letter != "letter_only":
+                document = self._cv(job_dir, jd_text, log)
+                self._render(job_dir, document, log)
+            if self.config.cover_letter in ("yes", "letter_only"):
+                self._letter(job_dir, jd_text, analysis, log)
+        except JobstitchError as exc:
+            return self._failed(log, exc, job_dir=job_dir)
+
+        self._finish_log(job_dir, log)
+        delivered = self.workspace.deliver(job_dir)
+        self.tracker.record(delivered, analysis)
+        return Outcome("delivered", "done", delivered)
+
+    def _cv(self, job_dir: Path, jd_text: str, log: JobLog) -> CVDocument:
+        """Write the CV — or reuse the one already in the folder.
+
+        A folder that survived a failed render still holds its document, and
+        re-rendering it costs nothing. That is the whole recovery story: edit
+        the JSON, drop the folder back, pay for LaTeX only.
+        """
+        artifacts = self._artifacts()
+        stored = job_dir / artifacts.document
+        if stored.is_file():
+            log.step(f"♻ reusing {stored.name} (no model call)")
+            return CVDocument.model_validate_json(stored.read_text(encoding="utf-8"))
+
+        log.step("✍ writing the CV (this takes minutes)...")
+        document = self._call(log, lambda: self.api.create_cv(
+            jd_text,
+            profile=self.config.require("candidate_profile.json").read_bytes(),
+            candidate_data=self.config.require("candidate_data.json").read_bytes(),
+            prompts=self.config.prompt_overrides(),
+            template=read_text(self.config.path("resume3.tex.jinja")),
+            signature=read_bytes(self.config.path("candidate_signature.png")),
+            temperature=self.config.temperature,
+        ))
+        stored.write_text(document.model_dump_json(indent=2), encoding="utf-8")
+        return document
+
+    def _render(self, job_dir: Path, document: CVDocument, log: JobLog) -> None:
+        log.step("🖨 rendering the PDF...")
+        rendered = self._call(log, lambda: self.api.render(
+            document=document,
+            template=read_text(self.config.path("resume3.tex.jinja")),
+            signature=read_bytes(self.config.path("candidate_signature.png")),
+        ))
+        artifacts = self._artifacts()
+        (job_dir / artifacts.tex).write_text(rendered.tex, encoding="utf-8")
+        (job_dir / artifacts.pdf).write_bytes(rendered.pdf_bytes())
+        log.step(f"✅ {artifacts.pdf} ({rendered.pages} page(s))")
+
+    def _letter(
+        self, job_dir: Path, jd_text: str, analysis: JDAnalysis, log: JobLog
+    ) -> None:
+        log.step("✉ writing the cover letter...")
+        letter = self._call(log, lambda: self.api.letter(
+            jd_text,
+            profile=self.config.require("candidate_profile.json").read_bytes(),
+            analysis=analysis.model_dump_json(),
+            prompt=read_text(self.config.path(LETTER_PROMPT)),
+            temperature=self.config.temperature,
+        ))
+        (job_dir / LETTER_FILENAME).write_text(letter.text, encoding="utf-8")
+        log.step(f"✅ {LETTER_FILENAME} ({letter.words} words)")
+
+    # --- endings ------------------------------------------------------------
+    def _reject(self, candidate: JDCandidate, log: JobLog) -> Outcome:
+        return Outcome(
+            "rejected", "not a job description", self._park(candidate, log)
+        )
+
+    def _failed(
+        self,
+        log: JobLog,
+        exc: JobstitchError,
+        *,
+        job_dir: Optional[Path] = None,
+        candidate: Optional[JDCandidate] = None,
+    ) -> Outcome:
+        log.step(f"✗ {exc.kind}: {exc}")
+        # A failure is always worth the extra round trip: this is the one
+        # moment the server's account of the run is what you need.
+        self._fetch_logs(log, exc.request_id)
+        if job_dir is not None:
+            self._finish_log(job_dir, log)
+            return Outcome("failed", str(exc), self.workspace.to_error(job_dir))
+        return Outcome("failed", str(exc), self._park(candidate, log))
+
+    def _park(self, candidate: Optional[JDCandidate], log: JobLog) -> Optional[Path]:
+        """File a claimed input under error/, with its log beside it.
+
+        Returns ``None`` for a source with no file behind it (the clipboard):
+        there is nothing to move and nothing to keep.
+        """
+        if candidate is None or candidate.origin is None or not candidate.origin.exists():
+            return None
+        moved = self.workspace.to_error(candidate.origin)
+        log.write(moved.with_suffix(moved.suffix + ".log"))
+        return moved
+
+    # --- helpers ------------------------------------------------------------
+    def _artifacts(self) -> Artifacts:
+        """File names come from your own candidate data, not from the server."""
+        data = json.loads(self.config.require("candidate_data.json").read_text(encoding="utf-8"))
+        return Artifacts(str(data.get("name") or "candidate"))
+
+    def _write_analysis(self, job_dir: Path, analysis: JDAnalysis) -> None:
+        (job_dir / ANALYSIS_FILENAME).write_text(
+            analysis.model_dump_json(indent=2), encoding="utf-8"
+        )
+
+    def _stored_jd(self, job_dir: Path) -> str:
+        """The JD text a resumed folder was built from, whatever it is called."""
+        from .workspace import JD_FILENAME
+
+        candidates = [job_dir / JD_FILENAME, *sorted(job_dir.glob("*.txt"))]
+        for path in candidates:
+            if path.is_file() and path.name not in (LETTER_FILENAME, LOG_FILENAME):
+                return path.read_text(encoding="utf-8")
+        raise JobstitchError(f"no job description file left in {job_dir.name}")
+
+    def _finish_log(self, job_dir: Path, log: JobLog) -> None:
+        log.write(job_dir / LOG_FILENAME)
+
+
+__all__ = ["JobRunner", "Outcome"]

@@ -1,0 +1,59 @@
+{
+  "candidate": {
+    "name": "Jordan Rivera",
+    "email": "jordan.rivera@example.com",
+    "linkedin": "https://www.linkedin.com/in/example-jordan-rivera",
+    "phone": "+1 555 0142",
+    "languages": "English: native. Spanish: full professional working proficiency.",
+    "location": "Lisbon",
+    "education": "June 2009: MSc in Computer Science, Example State University."
+  },
+  "cv": {
+    "company_name": "Acme & Co.",
+    "job_title": "Head of IT / Platform",
+    "summary": "Leader with **20% growth** delivered on a 50M$ budget; drove C_I/C_D adoption across ~12 teams.",
+    "skills": [
+      "Kubernetes",
+      "AWS & Azure",
+      "Cost control (-30%)",
+      "*Stakeholder* management",
+      "ITIL v4",
+      "Python_3",
+      "Team leadership",
+      "Budgets ~5M#"
+    ],
+    "experiences": [
+      {
+        "title": "IT Director",
+        "company": "Globex S.p.A.",
+        "location": "Milan, Italy",
+        "dates": "February 2021 {}-- Present",
+        "project_name": "Winter Olympics {}-- Organizing Committee",
+        "bullet_points": [
+          "Cut spend by **30%** while scaling to 100+ nodes (a^b notation, 50% uptime SLA).",
+          "Ran a \\team of 12; owned the {roadmap} and the [backlog].",
+          "Migrated ~200 workloads to *hybrid* cloud."
+        ]
+      },
+      {
+        "title": "Head of Infrastructure",
+        "company": "Initech",
+        "location": "Lisbon, Portugal",
+        "dates": "March 2018 {}-- January 2021",
+        "project_name": null,
+        "bullet_points": [
+          "Consolidated 4 data centres into 2.",
+          "Introduced SRE practice & on-call rotation."
+        ]
+      },
+      {
+        "title": "Systems Engineer",
+        "company": "Umbrella Ltd",
+        "location": "Porto, Portugal",
+        "dates": "June 2012 {}-- February 2018",
+        "project_name": null,
+        "bullet_points": ["Automated provisioning for 300 servers."]
+      }
+    ]
+  }
+}

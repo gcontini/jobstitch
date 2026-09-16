@@ -1,0 +1,31 @@
+[project]
+name = "jobstitch-client"
+version = "0.2.0"
+description = "jobstitch CLI: clipboard/watch/submit/render against a jobstitch server."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "jobstitch-contracts",
+    # The only transport. Everything else here is local I/O.
+    "httpx>=0.27",
+    # Clipboard mode.
+    "pyperclip",
+    # applications.xlsx tracking.
+    "openpyxl",
+]
+
+[project.scripts]
+jobstitch = "jobstitch_client.cli:main"
+
+[tool.uv.sources]
+jobstitch-contracts = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"jobstitch_client.resources" = ["*.xlsx"]

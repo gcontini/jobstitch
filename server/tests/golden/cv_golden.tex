@@ -1,0 +1,130 @@
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb,amsfonts,textcomp}
+\usepackage{color}
+\definecolor{darkblue}{RGB}{15,39,86}
+\usepackage{array}
+\usepackage{hhline}
+\usepackage{fontawesome5}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, urlcolor=darkblue, linkcolor=darkblue, citecolor=darkblue, filecolor=darkblue, pdftitle=CV}
+\usepackage[pdftex]{graphicx}
+% Text styles
+\newcommand\textstyleStrongEmphasis[1]{\textbf{#1}}
+\newcommand\textstyleEmphasis[1]{\textit{#1}}
+% Outline numbering
+\setcounter{secnumdepth}{0}
+% List styles
+\newcommand\liststyleListi{%
+\renewcommand\labelitemi{{\textbullet}}
+\renewcommand\labelitemii{{\textbullet}}
+\renewcommand\labelitemiii{{\textbullet}}
+\renewcommand\labelitemiv{{\textbullet}}
+}
+% Page layout (geometry)
+\setlength\voffset{-1in}
+\setlength\hoffset{-1in}
+\setlength\topmargin{2.54cm}
+\setlength\oddsidemargin{2.54cm}
+\setlength\textheight{24.619999cm}
+\setlength\textwidth{15.920999cm}
+\setlength\footskip{0.0cm}
+\setlength\headheight{0cm}
+\setlength\headsep{0cm}
+% Footnote rule
+\setlength{\skip\footins}{0.119cm}
+\renewcommand\footnoterule{\vspace*{-0.018cm}\setlength\leftskip{0pt}\setlength\rightskip{0pt plus 1fil}\noindent\textcolor{black}{\rule{0.25\columnwidth}{0.018cm}}\vspace*{0.101cm}}
+% Pages styles
+\makeatletter
+\newcommand\ps@Standard{
+  \renewcommand\@oddhead{}
+  \renewcommand\@evenhead{}
+  \renewcommand\@oddfoot{}
+  \renewcommand\@evenfoot{}
+  \renewcommand\thepage{\arabic{page}}
+}
+\makeatother
+\pagestyle{Standard}
+\title{CV}
+\author{Jordan Rivera}
+\date{2026-08-13}
+\begin{document}
+\noindent
+\colorbox{darkblue}{\parbox{\dimexpr\linewidth-2\fboxsep}{%
+  \textcolor{white}{\Large\scshape Jordan Rivera}\\[2pt]
+  \textcolor{white}{\large\itshape Head of IT / Platform}}}
+
+
+
+\begin{center}
+  \textcolor{darkblue}{\faEnvelope}\hspace{0.35em}\href{mailto:jordan.rivera@example.com}{jordan.rivera@example.com}\quad
+  \textcolor{darkblue}{\faPhone}\hspace{0.35em}+1 555 0142\quad
+  \textcolor{darkblue}{\faLinkedin}\hspace{0.35em}\href{https://www.linkedin.com/in/example-jordan-rivera}{linkedin.com/in/example-jordan-rivera}
+\end{center}
+\textcolor{darkblue}{\subsection{Profile}}
+{Leader with \textbf{20\% growth} delivered on a 50M\$ budget; drove C\_I/C\_D adoption across \textasciitilde{}12 teams.}
+
+\textcolor{darkblue}{\subsection{Skills}}
+\noindent
+{Kubernetes {\textbullet} AWS \& Azure {\textbullet} Cost control (-30\%) {\textbullet} \textit{Stakeholder} management {\textbullet} ITIL v4 {\textbullet} Python\_3 {\textbullet} Team leadership {\textbullet} Budgets \textasciitilde{}5M\#}
+
+\textcolor{darkblue}{\subsection{Work Experience}}
+\subsubsection[IT Director / Globex S.p.A. (Milan, Italy)]{\textstyleStrongEmphasis{IT Director / Globex S.p.A.} \textmd{(Milan, Italy)}}
+\paragraph[February 2021 {}-- Present, Winter Olympics {}-- Organizing Committee]{\textstyleEmphasis{February 2021 {}-- Present, }\textstyleStrongEmphasis{Winter Olympics {}-- Organizing Committee}}
+\liststyleListi
+\begin{itemize}
+\item {Cut spend by \textbf{30\%} while scaling to 100+ nodes (a\textasciicircum{}b notation, 50\% uptime SLA).}
+\item {Ran a \textbackslash{}team of 12; owned the \{roadmap\} and the [backlog\].}
+\item {Migrated \textasciitilde{}200 workloads to \textit{hybrid} cloud.}
+\end{itemize}
+\subsubsection[Head of Infrastructure / Initech (Lisbon, Portugal)]{\textstyleStrongEmphasis{Head of Infrastructure / Initech} \textmd{(Lisbon, Portugal)}}
+\paragraph[March 2018 {}-- January 2021]{\textstyleEmphasis{March 2018 {}-- January 2021}}
+\liststyleListi
+\begin{itemize}
+\item {Consolidated 4 data centres into 2.}
+\item {Introduced SRE practice \& on-call rotation.}
+\end{itemize}
+\subsubsection[Systems Engineer / Umbrella Ltd (Porto, Portugal)]{\textstyleStrongEmphasis{Systems Engineer / Umbrella Ltd} \textmd{(Porto, Portugal)}}
+\paragraph[June 2012 {}-- February 2018]{\textstyleEmphasis{June 2012 {}-- February 2018}}
+\liststyleListi
+\begin{itemize}
+\item {Automated provisioning for 300 servers.}
+\end{itemize}
+\textcolor{darkblue}{\subsection{Languages}}
+{English: native. Spanish: full professional working proficiency.}
+
+\textcolor{darkblue}{\subsection{Professional Certifications}}
+
+\begin{tabular}{@{}l@{\hspace{0.5em}}c@{\hspace{0.6em}}l@{}}
+
+
+March 2025 & : & Certified Kubernetes Administrator (CKA)\\
+September 2023 & : & AWS Solutions Architect -- Associate\\
+January 2022 & : & Google Cloud Professional Cloud Architect\\
+June 2019 & : & DELE B2 (Spanish language proficiency)\\
+\end{tabular}
+
+\textcolor{darkblue}{\subsection{Education:}}
+{June 2009: MSc in Computer Science, Example State University.}
+
+\bigskip
+
+\noindent{Lisbon, 2026/01/15}
+
+\begin{flushright}
+\includegraphics[width=5.278cm,height=1.36cm]{candidate_signature.png}
+\end{flushright}
+
+
+\bigskip
+
+
+\bigskip
+
+
+\bigskip
+\noindent{\small\textcolor[rgb]{0.5,0.5,0.5}{I hereby consent to the processing of the data I provided in this CV according to UE regulation 2016/679}}
+\end{document}

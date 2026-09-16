@@ -1,0 +1,33 @@
+# jobstitch client configuration.
+#
+# Copy to jobstitch.toml and put it next to the jobstitch executable (or pass
+# --config). Every value here can be overridden on the command line.
+
+# The jobstitch server to use.
+server_url = "http://localhost:8080"
+
+# Only if that server requires one (it will answer 401 without it).
+# token = "..."
+
+# Write a cover letter too: "no" | "yes" | "letter_only".
+cover_letter = "no"
+
+# Sampling temperature for the CV and the analysis. Omit for the server's own.
+# temperature = 0.4
+
+# How long to wait for a CV, in seconds. Writing one takes minutes.
+# timeout = 1800
+
+# Where your files are. Omit any entry and jobstitch looks for the file by its
+# usual name next to the executable; omit it there too and the server's own
+# default is used (the two candidate files have no default and are required).
+# [files]
+# profile          = "candidate_profile.json"
+# candidate_data   = "candidate_data.json"
+# preferences      = "pers_preferences.md"
+# signature        = "candidate_signature.png"
+# template         = "resume3.tex.jinja"
+# prompt_cv        = "sys_prompt_cv.txt"
+# prompt_highlight = "sys_prompt_highlight.txt"
+# prompt_review    = "sys_review_prompt.txt"
+# prompt_letter    = "sys_prompt_letter.txt"

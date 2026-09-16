@@ -1,0 +1,38 @@
+[project]
+name = "jobstitch-server"
+version = "0.2.0"
+description = "jobstitch HTTP API: turn a job description into tailored CV data and a compiled LaTeX PDF."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "jobstitch-contracts",
+    # Web layer. uvicorn plain, not [standard]: no uvloop/httptools/websockets.
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    # Required for File()/Form() parts — FastAPI raises without it.
+    "python-multipart>=0.0.9",
+    # Any OpenAI-compatible endpoint (see resources/models.toml).
+    "openai",
+    # Templating the LaTeX CV.
+    "Jinja2",
+    # Page counting on the compiled PDF.
+    "pypdf",
+    # .env secrets for local runs.
+    "python-dotenv",
+]
+
+[project.scripts]
+jobstitch-api = "jobstitch_server.server:main"
+
+[tool.uv.sources]
+jobstitch-contracts = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"jobstitch_server.resources" = ["*.txt", "*.toml", "*.jinja", "*.png"]

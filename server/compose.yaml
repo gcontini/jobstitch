@@ -1,0 +1,42 @@
+# The jobstitch API server, for local use by the client.
+#
+#     cp .env.example .env            # then fill in one provider's API key
+#     docker compose up --build
+#     jobstitch clipboard --out ~/applications   # on your machine, not in here
+#
+# Build context is the repository root: the image needs contracts/ and
+# server/, which live above this file.
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: jobstitch-server:latest
+    init: true
+
+    # The provider keys live here and nowhere else. The client never sees one.
+    env_file:
+      - ../.env
+    environment:
+      PORT: "8080"
+      # Set a token to close the server; unset means anyone who can reach it
+      # can spend your tokens, which is only safe on a private network.
+      JOBSTITCH_API_TOKEN: "${JOBSTITCH_API_TOKEN:-}"
+      JOBSTITCH_MAX_CONCURRENT_JOBS: "${JOBSTITCH_MAX_CONCURRENT_JOBS:-10}"
+      JOBSTITCH_WORK_DIR: /tmp/jobstitch
+
+    ports:
+      - "${JOBSTITCH_PORT:-8080}:8080"
+
+    # Nothing is written outside the scratch directory, so the filesystem can
+    # be read-only. exec on the tmpfs: pdflatex writes and then reads back its
+    # font cache there.
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,exec
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s

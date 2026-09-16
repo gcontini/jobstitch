@@ -1,0 +1,46 @@
+Head of IT Infrastructure — Acme Logistics Group
+Milan, Italy (hybrid, 2 days on site) · Permanent · Posted 3 days ago
+
+About the role
+Acme Logistics Group operates a European distribution network of 14 warehouses
+and a fleet of 600 vehicles. We are looking for a Head of IT Infrastructure to
+own the platforms that keep that network running: two data centres, a growing
+public cloud estate, and the connectivity between them and every site.
+
+You will lead a team of nine engineers across infrastructure, networking and
+service desk, and report to the CIO. The role combines hands-on technical
+ownership with budget responsibility and vendor management. This is a
+consolidation phase, not a greenfield one: much of the first year is rationalising
+what a decade of acquisitions has left behind.
+
+What you will do
+- Own the availability, performance and cost of all infrastructure services,
+  on premise and in the cloud.
+- Lead the migration of legacy workloads from our two data centres into a
+  hybrid cloud target architecture, retiring at least one facility.
+- Define and enforce standards for provisioning, patching, monitoring and
+  backup across all sites.
+- Run the annual infrastructure budget (approximately EUR 4M) and the
+  relationships with our main hardware, connectivity and cloud vendors.
+- Build the on-call rotation and incident process, and act as final escalation
+  for major incidents.
+- Grow the team: hiring, mentoring, and setting technical direction.
+
+What we are looking for
+- Eight or more years in infrastructure engineering, with at least three
+  leading a team.
+- Deep experience of virtualisation and Linux, plus one major public cloud
+  (we use AWS, with a small Azure footprint).
+- Proven track record of a data centre consolidation or cloud migration
+  delivered end to end.
+- Comfortable owning a budget and negotiating with vendors.
+- Working knowledge of ITIL service management practices.
+- Fluent English; Italian is an advantage but not a requirement.
+
+What we offer
+- EUR 85,000 – 105,000 depending on experience, plus an annual bonus.
+- Hybrid working, two days per week in our Milan office.
+- Training budget and certification support.
+
+Acme Logistics Group is an equal opportunity employer.
+Apply at https://careers.example.com/acme/head-of-it-infrastructure

@@ -1,20 +1,20 @@
 # --- Secrets ----------------------------------------------------------------
 .env
+# The client's own configuration: it holds a bearer token.
+jobstitch.toml
 
-# --- Workspace --------------------------------------------------------------
-# JOBSTITCH_HOME defaults to ~/jobstitch, outside the repo. These entries only
-# matter if you point it back inside the checkout.
-/workspace/
-/incoming/
-/working/
-/error/
-/resume/
-/applications.xlsx
+# --- Your data --------------------------------------------------------------
+# The fictional set in examples/candidate/ is committed; yours is not. Keep
+# your real files next to the client binary, outside the checkout.
+/candidate_profile.json
+/candidate_data.json
+/pers_preferences.md
+/candidate_signature.png
 
-# --- Docker -----------------------------------------------------------------
-# Default mount point for compose.yaml (override with JOBSTITCH_DATA).
-/jobstitch_data/
-
+# --- Output -----------------------------------------------------------------
+# Anything a run produced: CVs, spreadsheets, scratch folders.
+/applications/
+/out/
 /jobstitch-data/*
 !/jobstitch-data/.gitkeep
 
