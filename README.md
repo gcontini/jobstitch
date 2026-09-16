@@ -1,4 +1,4 @@
-# jobstitch
+# Job Stitch
 
 Turn a job description and your unstructured experiences into a tailored, two-page LaTeX CV and a cover letter, using any OpenAI-compatible model.
 
