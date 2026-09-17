@@ -1,14 +1,16 @@
 """Turning failures into a status code and a sentence.
 
-One table, one handler. A request that fails gets the same body shape as one
-that succeeds: a cause and the request id that unlocks the full log of the
-attempts that led there. The cause is one string — the detail that would not
-fit in it is in the log, which is where a reader who wants it is going anyway.
+One table, one handler, one walk: :func:`describe_failure` is the single place
+that answers "what does this exception produce on the wire", so a new failure
+type is added once rather than once per question asked about it. A request
+that fails gets the same body shape as one that succeeds: a cause and the
+request id that unlocks the full log of the attempts that led there.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Tuple
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -21,7 +23,6 @@ from ..pipeline.errors import (
     BudgetExceededError,
     LatexCompileError,
     LatexTimeoutError,
-    ModelOutputError,
     PipelineError,
 )
 
@@ -73,54 +74,56 @@ class JobNotReady(ApiError):
 
 
 #: Pipeline failures that are the client's or the provider's fault, not a bug.
+#: Anything else derived from :class:`PipelineError` is a 502 — the model never
+#: produced something usable, which is a gateway problem rather than ours.
 _PIPELINE_STATUS = {
     LatexCompileError: 422,
     LatexTimeoutError: 504,
     BudgetExceededError: 504,
-    ModelOutputError: 502,
 }
 
 
-def status_for(exc: Exception) -> int:
-    """HTTP status for an exception that escaped a handler.
+def _pipeline_message(exc: PipelineError) -> str:
+    """``kind [stage]: message (detail)`` — the stage and the detail are what
+    tell a reader which of several attempts failed, and on which file."""
+    where = f" [{exc.stage}]" if exc.stage else ""
+    detail = "".join(f" {key}={value}" for key, value in exc.detail.items())
+    return f"{exc.kind}{where}: {exc}{f' ({detail.strip()})' if detail else ''}"
+
+
+def _provider_message(exc: APIError) -> str:
+    # Never echo the body: it can carry the endpoint and the key.
+    kind = {
+        APITimeoutError: "provider_timeout",
+        APIConnectionError: "provider_unreachable",
+    }.get(type(exc), "provider_error")
+    return f"{kind}: the model endpoint failed: {type(exc).__name__}"
+
+
+def describe_failure(exc: Exception) -> Tuple[int, str]:
+    """The HTTP status and the one-line cause for a failure, decided once.
 
     Anything the model provider did wrong is a gateway problem, not ours: the
     server is working, the thing behind it is not. Only a genuine bug here
     earns a 500.
     """
     if isinstance(exc, ApiError):
-        return exc.status
-    for kind, status in _PIPELINE_STATUS.items():
-        if isinstance(exc, kind):
-            return status
+        return exc.status, f"{exc.kind}: {exc.message}"
     if isinstance(exc, PipelineError):
-        return 502
+        for kind, status in _PIPELINE_STATUS.items():
+            if isinstance(exc, kind):
+                return status, _pipeline_message(exc)
+        return 502, _pipeline_message(exc)
     if isinstance(exc, ValidationError):
-        return 422
-    if isinstance(exc, (APITimeoutError, TimeoutError)):
-        return 504
+        return 422, "validation_error: the uploaded document does not match the expected schema"
     if isinstance(exc, APIError):
-        return 502
-    return 500
-
-
-def error_message(exc: Exception) -> str:
-    """One line for the failure, never echoing a key or a local path."""
-    if isinstance(exc, ApiError):
-        return f"{exc.kind}: {exc.message}"
-    if isinstance(exc, PipelineError):
-        where = f" [{exc.stage}]" if exc.stage else ""
-        return f"{exc.kind}{where}: {exc}"
-    if isinstance(exc, ValidationError):
-        return "validation_error: the uploaded document does not match the expected schema"
-    if isinstance(exc, APIError):
-        # Never echo the body: it can carry the endpoint and the key.
-        kind = {
-            APITimeoutError: "provider_timeout",
-            APIConnectionError: "provider_unreachable",
-        }.get(type(exc), "provider_error")
-        return f"{kind}: the model endpoint failed: {type(exc).__name__}"
-    return f"internal_error: {type(exc).__name__}: {exc}"
+        # APITimeoutError is an APIError, but a timeout is 504 rather than 502.
+        return (504 if isinstance(exc, APITimeoutError) else 502), _provider_message(exc)
+    # A bare TimeoutError is still the thing behind us being slow; anything
+    # left over is a bug here.
+    return (504 if isinstance(exc, TimeoutError) else 500), (
+        f"internal_error: {type(exc).__name__}: {exc}"
+    )
 
 
 def failure_response(request_id: str, status: int, message: str) -> JSONResponse:
@@ -144,7 +147,7 @@ def failure_response(request_id: str, status: int, message: str) -> JSONResponse
 
 def log_failure(exc: Exception, where: str) -> None:
     """Log a failure the way the handler does: a traceback only for a real bug."""
-    status = status_for(exc)
+    status = describe_failure(exc)[0]
     if status >= 500 and not isinstance(exc, (ApiError, PipelineError, APIError)):
         logger.exception("unhandled error on %s", where)
     else:
@@ -154,9 +157,8 @@ def log_failure(exc: Exception, where: str) -> None:
 async def handle_exception(request: Request, exc: Exception) -> JSONResponse:
     """Single exception handler for the whole app."""
     log_failure(exc, request.url.path)
-    return failure_response(
-        current_run().request_id, status_for(exc), error_message(exc)
-    )
+    status, message = describe_failure(exc)
+    return failure_response(current_run().request_id, status, message)
 
 
 __all__ = [
@@ -168,9 +170,8 @@ __all__ = [
     "TooManyJobs",
     "UnknownRequest",
     "JobNotReady",
+    "describe_failure",
     "failure_response",
     "handle_exception",
     "log_failure",
-    "status_for",
-    "error_message",
 ]

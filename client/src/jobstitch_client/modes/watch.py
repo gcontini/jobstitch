@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from ..config import Config
 from ..sources.folder import FolderWatchSource
-from ..ui import fail
+from ..ui import fail, warn
 from . import Session
 
 
-def run(config: Config, inbox: Path, out: Path, *, assume_yes: bool = False,
+def run(config: Config, inbox: Optional[Path], out: Path, *, assume_yes: bool = False,
         track: bool = True) -> int:
-    inbox = Path(inbox).expanduser().resolve()
-    if not inbox.is_dir():
-        fail(f"input folder does not exist: {inbox}")
+    if inbox is None:
+        inbox = Path.cwd() / "incoming"
+        warn(f"no --in given, watching {inbox}")
+        inbox.mkdir(exist_ok=True)
+    else:
+        inbox = Path(inbox).expanduser().resolve()
+        if not inbox.is_dir():
+            fail(f"input folder does not exist: {inbox}")
 
     session = Session.build(config, out, assume_yes=assume_yes, track=track)
     if session.workspace.root == inbox:

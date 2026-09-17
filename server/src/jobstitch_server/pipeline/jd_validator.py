@@ -29,87 +29,24 @@ from jobstitch_contracts import (
 from pydantic import ValidationError
 
 from ..bundle import CandidateInputs
+from ..defaults import read_text_default
 from ..model_selector import ModelSelector
 from ..observability import LOGGER_ROOT, stage
 from .errors import ModelOutputError
+from .parsing import parse_model_json
 
 logger = logging.getLogger(f"{LOGGER_ROOT}.jd")
 
-#: Hoisted out of :meth:`JDValidator.analyze` unchanged: it is the contract
-#: with the model, and it reads better as a constant than as an f-string
-#: buried in a call.
-JD_SYSTEM_PROMPT = (
-    "You are a job-matching analyst. Given a JOB DESCRIPTION a CANDIDATE "
-    "PROFILE and PERSONAL_PREFERENCE, compute how well the candidate fits "
-    "the role and extract the requested structured facts. "
-    "Scoring guidance: weigh hard-skill overlap, domain/industry relevance, "
-    "seniority, and language/location fit. Output an integer 0-100 for "
-    "match_percentage plus a one-line match_rationale. "
-    "Rules:\n"
-    "- work_mode must be one of: full_remote, hybrid, on_site, not_specified.\n"
-    "- expected_salary: the salary as stated in the JD, else null.\n"
-    "- max_salary: if the JD states a salary range, the UPPER bound as an "
-    "integer (e.g. 'EUR 60k-80k' -> 80000); if a single number is stated, "
-    "that number; if no salary is stated, -1.\n"
-    "- experience_level: guess the seniority required by the JD, one of: "
-    "entry_level, intermediate, professional, manager, director.\n"
-    "- hard_skills: at most 4 hard/technical skills required by the JD.\n"
-    "- soft_skills: at most 4 soft skills required by the JD.\n"
-    "- posting_type: 'direct' if the post is from the hiring company itself, "
-    "'headhunter' if it is posted by a recruiter/headhunter agency "
-    "(e.g. 'listed on behalf of a partner company', agency branding).\n"
-    "- company_name: the hiring company if known, else the posting agency.\n"
-    "- posting_url: the URL of the job posting if present in the JD, else null. If the url is from linkedin.com just report the url, not the query parameters.\n"
-    "- gaps: Describe the gaps between the candidate and the job description."
-    "- pers_preferences: Describe the gaps between the JD and the PERSONAL_PREFERENCE as text only — no score in this field.\n"
-    "- pers_preference_score: The numeric (real) score obtained by summing "
-    "the validated PERSONAL_PREFERENCE points against the JD "
-    "(e.g. 2.5, 0.5); 0.0 if none apply. Output it as a JSON number, not a string.\n"
-    "OUTPUT FORMAT (critical):\n"
-    "- Reply with ONLY a single JSON object (data). No markdown, no prose "
-    "before or after, no code fences.\n"
-    "- The JSON must contain the fields below with REAL values extracted from "
-    "the JD. Do NOT echo the schema/template itself: your top-level keys must "
-    "be exactly these field names — never 'properties', 'title', 'type', "
-    "'$schema', 'description'.\n"
-    "- Field names and types:\n"
-    "  match_percentage: int\n"
-    "  match_rationale: string or null\n"
-    "  job_title: string\n"
-    "  work_location: string or null\n"
-    "  work_mode: one of full_remote, hybrid, on_site, not_specified\n"
-    "  expected_salary: string or null\n"
-    "  max_salary: int or null\n"
-    "  experience_level: one of entry_level, intermediate, professional, manager, director\n"
-    "  hard_skills: array of strings (max 4)\n"
-    "  soft_skills: array of strings (max 4)\n"
-    "  company_name: string\n"
-    "  posting_type: 'direct' or 'headhunter'\n"
-    "  posting_url: string or null\n"
-    "  gaps: string\n"
-    "  pers_preferences: string\n"
-    "  pers_preference_score: number\n"
-    "Example of a valid response:\n"
-    '{"match_percentage": 82, "match_rationale": "Strong overlap with the profile.", '
-    '"job_title": "Solution Architect", "work_location": "Milan, Italy", '
-    '"work_mode": "hybrid", "expected_salary": "EUR 60k-80k", '
-    '"max_salary": 80000, "experience_level": "professional", '
-    '"hard_skills": ["AWS", "Kubernetes"], "soft_skills": ["Communication"], '
-    '"company_name": "Acme Corp", "posting_type": "direct", '
-    '"posting_url": "https://example.com/job", '
-    '"gaps": "No previous management experience.", '
-    '"pers_preferences": "Hybrid work is acceptable.", '
-    '"pers_preference_score": 1.5}\n'
-)
+#: Generate -> validate rounds. The validation error is fed back between them,
+#: the same self-correction the CV pipeline uses.
+MAX_ATTEMPTS = 2
 
-#: The detection prompt, from the clipboard importer it used to live in.
-DETECT_PROMPT = (
-    "You are a job description validator. The text below was "
-    "copied to a clipboard. Reply with exactly 'YES' if it is "
-    "a job description (a job posting mentioning role, "
-    "company, responsibilities and/or requirements), or "
-    "exactly 'NO' if it is not.\n\nTEXT:\n"
-)
+#: The contract with the model for :meth:`JDValidator.analyze`, shipped as
+#: ``resources/sys_prompt_analysis.txt`` alongside the CV/letter prompts.
+JD_SYSTEM_PROMPT = read_text_default("sys_prompt_analysis.txt")
+
+#: The detection prompt, shipped as ``resources/sys_prompt_jd_detect.txt``.
+DETECT_PROMPT = read_text_default("sys_prompt_jd_detect.txt")
 
 
 class JDValidator:
@@ -138,28 +75,13 @@ class JDValidator:
     # --- private helpers ---------------------------------------------------
     @staticmethod
     def _parse_jd_analysis(text: str) -> JDAnalysis:
-        """Strip markdown code fences (if any) and validate the LLM JSON payload."""
-        content = text.strip()
-        if content.startswith("```"):
-            lines = content.splitlines()
-            if lines and lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            content = "\n".join(lines).strip()
-        data = json.loads(content)                     # -> JSONDecodeError on bad JSON
-        try:
-            return JDAnalysis.model_validate(data)     # -> ValidationError on bad schema
-        except ValidationError:
-            # NESTED-PAYLOAD FALLBACK (isolated; roll back this whole try/except
-            # to revert): some flash models wrap the real payload inside a single
-            # string field, e.g. {"description": "{\"match_percentage\": ..., ...}"}.
-            # Unwrap and re-validate.
-            if isinstance(data, dict) and len(data) == 1:
-                wrapped = next(iter(data.values()))
-                if isinstance(wrapped, str):
-                    return JDAnalysis.model_validate(json.loads(wrapped))
-            raise
+        """Strip markdown code fences (if any) and validate the LLM JSON payload.
+
+        ``unwrap_nested`` is on here and nowhere else: the flash models this
+        role runs on are the ones that wrap the payload in a single string
+        field.
+        """
+        return parse_model_json(text, JDAnalysis, unwrap_nested=True)
 
     @staticmethod
     def _clamp_list(items, limit: int) -> List[str]:
@@ -215,8 +137,8 @@ class JDValidator:
 
         # Generate + validate, with one retry that feeds the validation error back.
         analysis = None
-        for attempt in range(1, 3):
-            with stage("jd.analysis", attempt=attempt):
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            with stage("jd.analysis"):
                 response = self.model_selector.completions_create(
                     messages,
                     response_format=self.model_selector.response_format(
@@ -264,4 +186,4 @@ class JDValidator:
         return analysis
 
 
-__all__ = ["JDValidator", "JD_SYSTEM_PROMPT", "DETECT_PROMPT"]
+__all__ = ["JDValidator", "MAX_ATTEMPTS"]

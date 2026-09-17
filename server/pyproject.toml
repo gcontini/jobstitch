@@ -31,8 +31,18 @@ jobstitch-contracts = { workspace = true }
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+# resources/ lives next to src/, not inside it, so it needs its own
+# package-dir entry and an explicit packages list (packages.find only scans
+# "where").
+[tool.setuptools]
+package-dir = { "" = "src", "jobstitch_server.resources" = "resources" }
+packages = [
+    "jobstitch_server",
+    "jobstitch_server.api",
+    "jobstitch_server.api.routers",
+    "jobstitch_server.pipeline",
+    "jobstitch_server.resources",
+]
 
 [tool.setuptools.package-data]
 "jobstitch_server.resources" = ["*.txt", "*.toml", "*.jinja", "*.png"]

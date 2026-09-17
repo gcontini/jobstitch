@@ -1,14 +1,14 @@
 """The application spreadsheet — one row per delivered CV.
 
-Bookkeeping on top of the CV, never a reason to fail a job: a broken or
-locked spreadsheet costs a warning and nothing else. The file's own header row
-is the schema, so renaming or reordering columns in your copy is supported by
-doing nothing.
+Bookkeeping on top of the CV, never a reason to fail a job — but that promise
+is kept by the caller, not here: a broken or locked spreadsheet raises, and
+``JobRunner._produce`` turns it into a warning and a delivered CV anyway. The
+file's own header row is the schema, so renaming or reordering columns in your
+copy is supported by doing nothing.
 """
 
 from __future__ import annotations
 
-import logging
 import re
 import shutil
 from datetime import date
@@ -18,8 +18,6 @@ from typing import Optional, Protocol
 
 import openpyxl
 from jobstitch_contracts import JDAnalysis
-
-logger = logging.getLogger("jobstitch_client.tracking")
 
 #: The empty spreadsheet shipped with the client, copied on first use.
 TEMPLATE_NAME = "applications.xlsx"

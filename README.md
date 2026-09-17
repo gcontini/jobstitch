@@ -34,7 +34,7 @@ other installed locally — the client talks to the server over HTTP.
 
 ```bash
 docker run -d -p 8080:8080 \
-  -e DASHSCOPE_API_KEY=... \
+  -e MODEL_API_KEY=... \
   gcontini/jobstitch-server:latest
 ```
 

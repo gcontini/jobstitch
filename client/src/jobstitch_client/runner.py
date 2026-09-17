@@ -22,7 +22,7 @@ from .config import LETTER_PROMPT, Config
 from .cvjob import write_cv
 from .joblog import JobLog
 from .sources import JDCandidate
-from .tracking import Tracker
+from .tracking import TEMPLATE_NAME, Tracker
 from .ui import Confirmer
 from .workspace import (
     ANALYSIS_FILENAME,
@@ -183,7 +183,14 @@ class JobRunner:
 
         self._finish_log(job_dir, log)
         delivered = self.workspace.deliver(job_dir)
-        self.tracker.record(delivered, analysis)
+        try:
+            self.tracker.record(delivered, analysis)
+        except Exception as exc:
+            # The CV is delivered and was paid for; a broken or locked
+            # spreadsheet is bookkeeping, and must not turn that into a
+            # failed job or kill the loop that is watching the folder.
+            log.step(f"⚠ could not record this job in {TEMPLATE_NAME}: {exc}")
+            self._finish_log(delivered, log)  # the warning belongs in log.log too
         return Outcome("delivered", "done", delivered)
 
     def _cv(self, job_dir: Path, jd_text: str, log: JobLog) -> None:

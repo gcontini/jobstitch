@@ -10,7 +10,7 @@ services:
   api:
     build:
       context: ..
-      dockerfile: server/Dockerfile
+      dockerfile: Dockerfile
     image: jobstitch-server:latest
     init: true
 

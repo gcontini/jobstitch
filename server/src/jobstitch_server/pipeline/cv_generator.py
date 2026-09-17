@@ -35,6 +35,7 @@ from ..observability import LOGGER_ROOT, stage
 from .cv_renderer import PAGE_LIMIT, CVRenderer, RenderResult
 from .cv_schema import TailoredCVData, prompt_schema
 from .errors import BudgetExceededError, ModelOutputError
+from .parsing import parse_model_json
 
 logger = logging.getLogger(f"{LOGGER_ROOT}.cv")
 
@@ -194,7 +195,7 @@ class CVGenerator:
         self._master_profile = dict(candidate.profile)
         self._system_message = {"role": "system", "content": bundle.sys_prompt_cv}
         self._highlight_message = {"role": "system", "content": bundle.sys_prompt_highlight}
-        self._review_message = {"role": "system", "content": bundle.sys_review_prompt}
+        self._review_message = {"role": "system", "content": bundle.sys_prompt_review}
         self._cached_schema = prompt_schema()
 
     # --- helpers ------------------------------------------------------------
@@ -250,53 +251,25 @@ class CVGenerator:
     def _extract_cv_data(response) -> TailoredCVData:
         """Parse the LLM response content into a validated ``TailoredCVData``.
 
-        Strips Markdown code fences if present, parses the JSON payload and
-        validates it against the :class:`TailoredCVData` Pydantic model. Raises
-        ``ValueError`` (incl. ``json.JSONDecodeError``) or ``ValidationError``
-        when the content is missing or does not conform to the schema.
+        Raises ``ValueError`` (incl. ``json.JSONDecodeError``) or
+        ``ValidationError`` when the content is missing or does not conform to
+        the schema; both are fed back to the model for a corrective retry.
         """
-        content = response.choices[0].message.content
-        if not content:
-            raise ValueError("LLM returned empty content")
-
-        text = content.strip()
-        # Strip Markdown code fences around the JSON payload, if present.
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines and lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
-
-        data = json.loads(text)                     # -> JSONDecodeError on bad JSON
-        return TailoredCVData.model_validate(data)  # -> ValidationError on bad schema
+        return parse_model_json(response.choices[0].message.content, TailoredCVData)
 
     @staticmethod
     def _extract_review_result(response) -> ReviewResult:
         """Parse the reviewer's response content into a :class:`ReviewResult`.
 
-        Strips Markdown code fences if present, parses the JSON payload and
-        validates it against :class:`ReviewResult`. Raises ``ValueError``
-        (incl. ``json.JSONDecodeError``) or ``ValidationError`` when the
-        content is missing or does not conform to the schema.
+        Raises ``ValueError`` (incl. ``json.JSONDecodeError``) or
+        ``ValidationError`` when the content is missing or does not conform to
+        the schema.
         """
-        content = response.choices[0].message.content
-        if not content:
-            raise ValueError("Reviewer returned empty content")
-
-        text = content.strip()
-        # Strip Markdown code fences around the JSON payload, if present.
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines and lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
-
-        data = json.loads(text)                     # -> JSONDecodeError on bad JSON
-        return ReviewResult.model_validate(data)    # -> ValidationError on bad schema
+        return parse_model_json(
+            response.choices[0].message.content,
+            ReviewResult,
+            empty="Reviewer returned empty content",
+        )
 
     def _highlight_keywords(
         self, cv_data: TailoredCVData, job_description: str
@@ -556,7 +529,7 @@ class CVGenerator:
             # validation errors back to the LLM until the output is
             # schema-valid.
             mark = self._mark()
-            with stage("cv.generate", attempt=attempt + 1):
+            with stage("cv.generate"):
                 cv_data = self._generate_valid_cv_data(messages)
             self._report("review", self._cost(mark, "generation finished"))
 
@@ -565,7 +538,7 @@ class CVGenerator:
             # attempt; OK lets the CV proceed to rendering.
             logger.info("--- content review ---")
             mark = self._mark()
-            with stage("cv.review", attempt=attempt + 1):
+            with stage("cv.review"):
                 review = self._review_cv_data(cv_data)
             if review.status == "REVIEW" and not review.violations:
                 # The reviewer flagged REVIEW without any specifics — this
@@ -609,7 +582,7 @@ class CVGenerator:
             self._report("page_check", self._cost(mark, "review passed"))
 
             logger.info("--- render %d ---", attempt + 1)
-            with stage("render", attempt=attempt + 1):
+            with stage("render"):
                 result = self._render(cv_data, f"attempt_{attempt + 1}")
             final_cv_data = cv_data
             logger.info("  Page check: %d pages -> %s", result.pages, result.advice)

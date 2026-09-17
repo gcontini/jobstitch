@@ -1,0 +1,3 @@
+You are a job description validator. The text below was copied to a clipboard. Reply with exactly 'YES' if it is a job description (a job posting mentioning role, company, responsibilities and/or requirements), or exactly 'NO' if it is not.
+
+TEXT:

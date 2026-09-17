@@ -133,7 +133,7 @@ def test_debug_folds_in_every_server_log(api, workspace, config):
     outcome = runner.handle(JDCandidate(text=JD_TEXT))
 
     log = (outcome.path / "log.log").read_text()
-    assert "--- server request test-request ---" in log
+    assert "--- server request test-request (1 line(s)) ---" in log
     assert "prompt=10, completion=20" in log, "the token spend is in the server's lines"
     assert api.calls.count("logs") == 3, "detect, analyze, and the CV job"
 
@@ -145,7 +145,7 @@ def test_a_failure_always_fetches_the_server_log(api, workspace, config):
 
     assert outcome.status == "failed"
     log = (outcome.path / "log.log").read_text()
-    assert "--- server request failed-request ---" in log
+    assert "--- server request failed-request (1 line(s)) ---" in log
     assert api.calls.count("logs") == 1, "only the failed request, and without --debug"
 
 
@@ -172,6 +172,28 @@ def test_the_spreadsheet_gets_a_row(runner, workspace):
 def test_tracking_can_be_turned_off(api, workspace, config):
     build(api, workspace, config, track=False).handle(JDCandidate(text=JD_TEXT))
     assert not (workspace.root / "applications.xlsx").exists()
+
+
+def test_a_broken_spreadsheet_costs_a_warning_and_not_the_job(api, workspace, config):
+    """The CV was paid for and is filed under cv/ before the row is written;
+    bookkeeping on top of it must not turn that back into a failure — or, in
+    watch mode, kill the loop that is waiting for the next posting."""
+
+    class Broken:
+        def record(self, job_dir, analysis):
+            raise RuntimeError(f"{workspace.root}/applications.xlsx has no date column")
+
+    runner = JobRunner(
+        api=api, workspace=workspace, config=config,
+        confirmer=ScriptedConfirmer(Decision(submit=True)), tracker=Broken(),
+    )
+    outcome = runner.handle(JDCandidate(text=JD_TEXT))
+
+    assert outcome.status == "delivered"
+    assert outcome.path.parent.parent == workspace.cv
+    log = (outcome.path / "log.log").read_text()
+    assert "could not record this job in applications.xlsx" in log
+    assert "has no date column" in log, "the underlying error is what you act on"
 
 
 def test_junk_never_reaches_the_server(runner, api):

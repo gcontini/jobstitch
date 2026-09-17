@@ -9,7 +9,7 @@ from jobstitch_client.config import ConfigError, load_config
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
-    """A folder that stands in for 'next to the executable'."""
+    """A folder that stands in for the current folder."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("JOBSTITCH_API_URL", raising=False)
     monkeypatch.delenv("JOBSTITCH_API_TOKEN", raising=False)
@@ -17,7 +17,7 @@ def home(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_files_next_to_the_executable_are_found_by_name(home):
+def test_files_in_the_current_folder_are_found_by_name(home):
     (home / "candidate_profile.json").write_text("{}")
     (home / "sys_prompt_cv.txt").write_text("prompt")
 
@@ -81,5 +81,5 @@ def test_a_bad_cover_letter_mode_is_refused(home):
 
 
 def test_a_required_file_that_is_missing_says_where_to_put_it(home):
-    with pytest.raises(ConfigError, match="next to the jobstitch executable"):
+    with pytest.raises(ConfigError, match="in the current folder"):
         load_config().require("candidate_profile.json")

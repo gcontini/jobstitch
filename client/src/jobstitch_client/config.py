@@ -1,7 +1,7 @@
 """Settings, from four places with one order of precedence.
 
-    command line  >  environment  >  jobstitch.toml  >  file found next to the
-    executable  >  the server's own default
+    command line  >  environment  >  jobstitch.toml  >  file found in the
+    current folder  >  the server's own default
 
 Nothing here reads the network or the job folders; it only answers "what did
 the user configure, and where are their files".
@@ -31,7 +31,7 @@ CONFIG_KEYS = {
     "template": "resume.tex.jinja",
     "prompt_cv": "sys_prompt_cv.txt",
     "prompt_highlight": "sys_prompt_highlight.txt",
-    "prompt_review": "sys_review_prompt.txt",
+    "prompt_review": "sys_prompt_review.txt",
     "prompt_letter": "sys_prompt_letter.txt",
 }
 
@@ -39,7 +39,7 @@ CONFIG_KEYS = {
 PROMPT_FILES = {
     "sys_prompt_cv.txt": "sys_prompt_cv",
     "sys_prompt_highlight.txt": "sys_prompt_highlight",
-    "sys_review_prompt.txt": "sys_review_prompt",
+    "sys_prompt_review.txt": "sys_prompt_review",
 }
 LETTER_PROMPT = "sys_prompt_letter.txt"
 
@@ -76,8 +76,8 @@ class Config:
         path = self.files.get(name)
         if path is None:
             raise ConfigError(
-                f"{name} is required but was not found. Put it next to the "
-                f"jobstitch executable, or name it in {self.config_path or 'jobstitch.toml'}."
+                f"{name} is required but was not found. Put it in the current "
+                f"folder, or name it in {self.config_path or 'jobstitch.toml'}."
             )
         return path
 

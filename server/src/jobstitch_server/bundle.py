@@ -37,7 +37,7 @@ class ResourceBundle:
 
     sys_prompt_cv: str
     sys_prompt_highlight: str
-    sys_review_prompt: str
+    sys_prompt_review: str
     sys_prompt_letter: str
     template_source: str
     template_name: str = TEMPLATE_FILE
@@ -79,7 +79,7 @@ def default_bundle() -> ResourceBundle:
     return ResourceBundle(
         sys_prompt_cv=read_text_default("sys_prompt_cv.txt"),
         sys_prompt_highlight=read_text_default("sys_prompt_highlight.txt"),
-        sys_review_prompt=read_text_default("sys_review_prompt.txt"),
+        sys_prompt_review=read_text_default("sys_prompt_review.txt"),
         sys_prompt_letter=read_text_default("sys_prompt_letter.txt"),
         template_source=read_text_default(TEMPLATE_FILE),
         assets={SIGNATURE_ASSET: read_bytes_default(PLACEHOLDER_SIGNATURE)},
@@ -103,7 +103,7 @@ def bundle_from_dir(directory: Path) -> ResourceBundle:
     return ResourceBundle(
         sys_prompt_cv=text("sys_prompt_cv.txt"),
         sys_prompt_highlight=text("sys_prompt_highlight.txt"),
-        sys_review_prompt=text("sys_review_prompt.txt"),
+        sys_prompt_review=text("sys_prompt_review.txt"),
         sys_prompt_letter=text("sys_prompt_letter.txt"),
         template_source=text(TEMPLATE_FILE),
         assets=assets,

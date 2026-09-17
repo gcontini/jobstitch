@@ -1,7 +1,8 @@
 """Centralized LLM model selection.
 
 jobstitch calls exactly three models, one per job, all declared in
-``resources/models.toml``:
+``resources/models.toml`` and sharing one provider (one API key/endpoint,
+declared once in the ``[provider]`` table):
 
 ``summary``
     JD detection, JD analysis and the cover letter — mid-size, light thinking,
@@ -19,11 +20,12 @@ parameters themselves: ask :func:`build_models` for all three (or
 :func:`build_model` for one), then call
 :meth:`ModelSelector.completions_create`.
 
-Nothing here knows about a specific provider. Each ``[models.*]`` table is
-self-contained and provider quirks are declared as capability flags rather than
-written as ``if name == ...`` branches. A model whose API key is not set
-borrows the endpoint of one that is (see :func:`resolve_spec`), so a single
-provider key runs the whole pipeline.
+Nothing here knows about a specific provider — provider quirks are declared as
+capability flags rather than written as ``if name == ...`` branches. The
+fundamental per-role settings (``model``, ``temperature``, ``thinking``,
+``structured_output``) can each be overridden by an env var named
+``JOBSTITCH_<ROLE>_<FIELD>`` (e.g. ``JOBSTITCH_CV_TEMPERATURE``), so a Docker
+deployment can tune a role without editing ``models.toml``.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ import logging
 import os
 import time
 import tomllib
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -49,13 +51,6 @@ MODELS_FILE = "models.toml"
 
 #: The three jobs jobstitch has a model for, in the order a run uses them.
 MODEL_ROLES = ("summary", "cv", "highlight")
-
-#: What each role is for, used in startup messages and error text.
-ROLE_JOBS = {
-    "summary": "JD analysis and the cover letter",
-    "cv": "CV writing and the content review",
-    "highlight": "keyword highlighting",
-}
 
 # Fallback used when models.toml omits it. max_tokens has no fallback: when
 # neither a model nor [defaults] declares it, the request omits max_tokens
@@ -76,44 +71,22 @@ WEB_SEARCH_EXTRA_BODY = {"enable_search": True}
 THINKING_SWITCH = "enable_thinking"
 THINKING_BUDGET = "thinking_budget"
 
-# What a model borrows from another when its own API key is not set: the
-# endpoint, the model name and the provider's capabilities. Everything else
-# (temperature, thinking, reasoning effort) stays the role's own.
-_ENDPOINT_FIELDS = (
-    "model",
-    "api_key_env",
-    "base_url_env",
-    "base_url",
-    "structured_output",
-    "web_search",
-)
-
 
 # ---------------------------------------------------------------------------
 # Declarative model table, loaded from resources/models.toml.
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class ModelSpec:
-    """One of the three models, as written in ``models.toml``.
+class ProviderConfig:
+    """The one LLM provider every role calls, as written in ``models.toml``.
 
-    Provider differences are capabilities, not names: ``web_search``,
-    ``thinking`` and ``structured_output`` are what :func:`build_model`
-    branches on.
+    jobstitch assumes a single provider/single API key — there is nothing to
+    fall back to, so a missing key is a hard startup error naming this one
+    variable rather than a per-role concern.
     """
 
-    role: str
-    model: str
     api_key_env: str
     base_url_env: Optional[str] = None
     base_url: Optional[str] = None
-    temperature: Optional[float] = None
-    reasoning_effort: Optional[str] = None
-    thinking: str = "auto"                 # "auto" | "on" | "off"
-    thinking_budget: Optional[int] = None  # reasoning-token cap, thinking = "on"
-    web_search: bool = False
-    # "json_schema_strict" | "json_schema" | "json_object" | "none"
-    structured_output: str = "json_object"
-    max_tokens: Optional[int] = None       # overrides [defaults].max_tokens
 
     def resolved_base_url(self) -> Optional[str]:
         """Endpoint URL: the env var when set, otherwise the declared literal."""
@@ -130,6 +103,27 @@ class ModelSpec:
     def is_usable(self) -> bool:
         """True when both the key and an endpoint URL are available."""
         return bool(self.resolved_api_key() and self.resolved_base_url())
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    """One of the three models, as written in ``models.toml``.
+
+    Provider differences are capabilities, not names: ``web_search``,
+    ``thinking`` and ``structured_output`` are what :func:`build_model`
+    branches on.
+    """
+
+    role: str
+    model: str
+    temperature: Optional[float] = None
+    reasoning_effort: Optional[str] = None
+    thinking: str = "auto"                 # "auto" | "on" | "off"
+    thinking_budget: Optional[int] = None  # reasoning-token cap, thinking = "on"
+    web_search: bool = False
+    # "json_schema_strict" | "json_schema" | "json_object" | "none"
+    structured_output: str = "json_object"
+    max_tokens: Optional[int] = None       # overrides [defaults].max_tokens
 
     # --- request shaping ---------------------------------------------------
     def thinking_extra_body(self) -> Optional[Dict[str, Any]]:
@@ -182,8 +176,9 @@ class ModelSpec:
 
 @dataclass
 class ModelConfig:
-    """Parsed ``models.toml``: the three models plus the ``[defaults]`` block."""
+    """Parsed ``models.toml``: the provider, the three models, ``[defaults]``."""
 
+    provider: ProviderConfig
     models: Dict[str, ModelSpec] = field(default_factory=dict)
     defaults: Dict[str, Any] = field(default_factory=dict)
 
@@ -198,6 +193,28 @@ class ModelConfig:
 
 
 _ALLOWED_KEYS = {f.name for f in ModelSpec.__dataclass_fields__.values()} - {"role"}
+_PROVIDER_ALLOWED_KEYS = {f.name for f in ProviderConfig.__dataclass_fields__.values()}
+
+#: Per-role fields a Docker deployment can override without editing
+#: models.toml, via JOBSTITCH_<ROLE>_<FIELD> (e.g. JOBSTITCH_CV_TEMPERATURE).
+ENV_OVERRIDABLE_FIELDS = ("model", "temperature", "thinking", "structured_output")
+
+
+def _apply_env_overrides(role: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    """Per-role env vars win over models.toml for the fundamental settings."""
+    body = dict(body)
+    for field_name in ENV_OVERRIDABLE_FIELDS:
+        env_var = f"JOBSTITCH_{role.upper()}_{field_name.upper()}"
+        value = os.getenv(env_var)
+        if value is None:
+            continue
+        if field_name == "temperature":
+            try:
+                value = float(value)
+            except ValueError:
+                raise ValueError(f"{env_var}={value!r} is not a number") from None
+        body[field_name] = value
+    return body
 
 
 def _validate(spec: ModelSpec, path: Path) -> None:
@@ -250,13 +267,34 @@ def _models_path(resources_dir: Optional[Path] = None) -> Path:
 def load_model_config(resources_dir: Optional[Path] = None) -> ModelConfig:
     """Parse ``models.toml`` from the resources folder.
 
-    Raises ``ValueError`` when a role is missing or unknown, when a key is
-    misspelled or carries a value nothing acts on, or when a model omits
-    ``model`` / ``api_key_env`` — a typo in the config surfaces at startup
-    instead of halfway through a job.
+    Raises ``ValueError`` when ``[provider]`` or a role is missing or unknown,
+    when a key is misspelled or carries a value nothing acts on, or when a
+    model omits ``model`` — a typo in the config surfaces at startup instead
+    of halfway through a job. ``model``, ``temperature``, ``thinking`` and
+    ``structured_output`` are read after applying any
+    ``JOBSTITCH_<ROLE>_<FIELD>`` env override (see
+    :data:`ENV_OVERRIDABLE_FIELDS`).
     """
     path = _models_path(resources_dir)
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
+
+    provider_body = raw.get("provider")
+    if not provider_body:
+        raise ValueError(
+            f"{path}: no [provider] table — jobstitch needs one provider's "
+            "endpoint, shared by all three models"
+        )
+    unknown_provider_keys = set(provider_body) - _PROVIDER_ALLOWED_KEYS
+    if unknown_provider_keys:
+        raise ValueError(
+            f"{path}: [provider] has unknown key(s) {sorted(unknown_provider_keys)}; "
+            f"allowed: {sorted(_PROVIDER_ALLOWED_KEYS)}"
+        )
+    if not provider_body.get("api_key_env"):
+        raise ValueError(f"{path}: [provider] is missing 'api_key_env'")
+    if not provider_body.get("base_url_env") and not provider_body.get("base_url"):
+        raise ValueError(f"{path}: [provider] needs 'base_url_env' or 'base_url'")
+    provider = ProviderConfig(**provider_body)
 
     declared = raw.get("models") or {}
     unknown_roles = set(declared) - set(MODEL_ROLES)
@@ -274,23 +312,22 @@ def load_model_config(resources_dir: Optional[Path] = None) -> ModelConfig:
 
     models: Dict[str, ModelSpec] = {}
     for role in MODEL_ROLES:
-        body = declared[role]
+        body = _apply_env_overrides(role, declared[role])
         unknown = set(body) - _ALLOWED_KEYS
         if unknown:
             raise ValueError(
                 f"{path}: [models.{role}] has unknown key(s) {sorted(unknown)}; "
                 f"allowed: {sorted(_ALLOWED_KEYS)}"
             )
-        for required in ("model", "api_key_env"):
-            if not body.get(required):
-                raise ValueError(
-                    f"{path}: [models.{role}] is missing '{required}'"
-                )
+        if not body.get("model"):
+            raise ValueError(
+                f"{path}: [models.{role}] is missing 'model'"
+            )
         spec = ModelSpec(role=role, **body)
         _validate(spec, path)
         models[role] = spec
 
-    return ModelConfig(models=models, defaults=raw.get("defaults") or {})
+    return ModelConfig(provider=provider, models=models, defaults=raw.get("defaults") or {})
 
 
 def describe_response_format(
@@ -448,7 +485,7 @@ class ModelSelector:
         shapes the reply, so a request that came back truncated or off-schema
         can be read back from the log without reproducing it) and what came
         back (duration, token usage and ``finish_reason``). The prompt and the
-        reply themselves are logged at DEBUG only \u2014 they carry the candidate's
+        reply themselves are logged at DEBUG only — they carry the candidate's
         profile.
         """
         kwargs: Dict[str, Any] = {"model": self.model, "messages": messages}
@@ -468,7 +505,7 @@ class ModelSelector:
             kwargs["reasoning_effort"] = self.reasoning_effort
 
         logger.info(
-            "  \u2192 [%s] %s | %s, max_tokens=%s, temperature=%s, "
+            "  → [%s] %s | %s, max_tokens=%s, temperature=%s, "
             "reasoning_effort=%s, extra_body=%s, input=%d msgs/%d chars",
             self.profile,
             self.model,
@@ -480,7 +517,7 @@ class ModelSelector:
             len(messages),
             sum(len(m.get("content") or "") for m in messages),
         )
-        logger.debug("  \u2192 [%s] messages: %s", self.profile, messages)
+        logger.debug("  → [%s] messages: %s", self.profile, messages)
 
         t0 = time.perf_counter()
         resp = self.llm.chat.completions.create(**kwargs)
@@ -497,7 +534,7 @@ class ModelSelector:
         usage = getattr(resp, "usage", None)
         if usage is None:
             logger.info(
-                "  \u23f1 [%s] %s %.1fs | usage not reported, finish_reason=%s, "
+                "  ⏱ [%s] %s %.1fs | usage not reported, finish_reason=%s, "
                 "content=%d chars",
                 self.profile, self.model, dt, finish, len(content or ""),
             )
@@ -505,7 +542,7 @@ class ModelSelector:
             details = getattr(usage, "completion_tokens_details", None)
             thinking = getattr(details, "reasoning_tokens", None) if details else None
             logger.info(
-                "  \u23f1 [%s] %s %.1fs | prompt=%s, completion=%s, thinking=%s, "
+                "  ⏱ [%s] %s %.1fs | prompt=%s, completion=%s, thinking=%s, "
                 "finish_reason=%s, content=%d chars",
                 self.profile,
                 self.model,
@@ -516,7 +553,7 @@ class ModelSelector:
                 finish,
                 len(content or ""),
             )
-        logger.debug("  \u21a9 [%s] content: %s", self.profile, content)
+        logger.debug("  ↩ [%s] content: %s", self.profile, content)
         return resp
 
     def __repr__(self) -> str:
@@ -527,26 +564,15 @@ class ModelSelector:
 
         The OpenAI client (``self.llm``) is shared with the original — no new
         client is created — so this is a cheap way to reuse one endpoint at
-        different generation settings. Only attributes known to
-        :class:`ModelSelector` may be overridden.
+        different generation settings. Only attributes this instance actually
+        holds may be overridden; ``llm`` is excluded because replacing it would
+        mean a new client, which is the thing this method exists to avoid.
 
         Examples
         --------
         >>> hotter = models["cv"].with_(temperature=0.8)
         """
-        known = {
-            "profile",
-            "model",
-            "max_tokens",
-            "temperature",
-            "frequency_penalty",
-            "presence_penalty",
-            "extra_body",
-            "reasoning_effort",
-            "supports_web_search",
-            "structured_output",
-        }
-        unknown = set(overrides) - known
+        unknown = set(overrides) - (set(vars(self)) - {"llm"})
         if unknown:
             raise TypeError(
                 f"ModelSelector.with_ got unexpected override(s): {sorted(unknown)}"
@@ -575,50 +601,6 @@ class ModelSelector:
 # ---------------------------------------------------------------------------
 # models.toml -> ModelSelector.
 # ---------------------------------------------------------------------------
-def missing_keys_hint(config: ModelConfig) -> str:
-    """Comma-separated list of the API-key variables the three models name."""
-    return ", ".join(sorted({spec.api_key_env for spec in config.models.values()}))
-
-
-def resolve_spec(role: str, config: ModelConfig) -> ModelSpec:
-    """The spec to build ``role`` from, borrowing an endpoint when needed.
-
-    Returns the role's own :class:`ModelSpec` when its API key and endpoint
-    are set. Otherwise the endpoint, model name and provider capabilities of
-    the first usable model are borrowed (and reported), while the role keeps
-    its own temperature, thinking and reasoning settings — so one provider key
-    is enough to run everything, at the size that provider was configured
-    with. Raises ``RuntimeError`` when no model at all is usable.
-    """
-    if role not in config.models:
-        raise KeyError(f"unknown model role {role!r}; expected one of {list(MODEL_ROLES)}")
-
-    spec = config.models[role]
-    if spec.is_usable():
-        return spec
-
-    donor = next(
-        (other for other in config.models.values() if other.is_usable()), None
-    )
-    if donor is None:
-        raise RuntimeError(
-            f"No model is usable for {ROLE_JOBS.get(role, role)}: none of the "
-            f"API keys in resources/{MODELS_FILE} are set. Set one of "
-            f"{missing_keys_hint(config)} in your .env."
-        )
-
-    missing = (
-        spec.api_key_env
-        if not spec.resolved_api_key()
-        else (spec.base_url_env or "base_url")
-    )
-    logger.info(
-        "  ℹ %s: %s not set — borrowing the %s endpoint (%s).",
-        role, missing, donor.role, donor.model,
-    )
-    return replace(spec, **{f: getattr(donor, f) for f in _ENDPOINT_FIELDS})
-
-
 def build_model(
     role: str,
     config: Optional[ModelConfig] = None,
@@ -628,23 +610,33 @@ def build_model(
 ) -> ModelSelector:
     """Build the :class:`ModelSelector` for one role in ``models.toml``.
 
-    Sampling and thinking settings come from the model's own table; anything it
-    leaves out is omitted from the request so the provider's default applies.
-    Callers that want a one-off variation clone the result with
+    Sampling and thinking settings come from the model's own table (after any
+    env override); anything it leaves out is omitted from the request so the
+    provider's default applies. Raises ``KeyError`` for an unknown role and
+    ``RuntimeError`` when the provider's API key is not set in the
+    environment. Callers that want a one-off variation clone the result with
     :meth:`ModelSelector.with_` instead of rebuilding it.
     """
     load_dotenv()
     if config is None:
         config = load_model_config(resources_dir)
 
-    spec = resolve_spec(role, config)
+    if role not in config.models:
+        raise KeyError(f"unknown model role {role!r}; expected one of {list(MODEL_ROLES)}")
+    if not config.provider.is_usable():
+        raise RuntimeError(
+            f"No model is usable: {config.provider.api_key_env} is not set. "
+            "Set it in your .env."
+        )
+
+    spec = config.models[role]
     if not quiet:
         logger.info("  🧠 %s: %s", role, spec.summary_line())
 
     return ModelSelector(
         profile=role,
-        api_key=spec.resolved_api_key() or "",
-        base_url=spec.resolved_base_url() or "",
+        api_key=config.provider.resolved_api_key() or "",
+        base_url=config.provider.resolved_base_url() or "",
         model=spec.model,
         max_tokens=spec.max_tokens if spec.max_tokens is not None else config.max_tokens,
         temperature=spec.temperature,
@@ -665,9 +657,8 @@ def build_models(
 ) -> Dict[str, ModelSelector]:
     """Build all three models, keyed by role (see :data:`MODEL_ROLES`).
 
-    Raises ``RuntimeError`` when not one of the declared API keys is set;
-    individual models missing a key borrow a configured endpoint rather than
-    dropping out, so the returned dict always has all three roles.
+    Raises ``RuntimeError`` when the provider's API key is not set — with one
+    provider there is no fallback, so all three roles fail together.
     """
     load_dotenv()
     if config is None:
@@ -678,16 +669,15 @@ def build_models(
 
 
 __all__ = [
+    "ENV_OVERRIDABLE_FIELDS",
     "MODELS_FILE",
     "MODEL_ROLES",
-    "ROLE_JOBS",
     "ModelConfig",
     "ModelSelector",
     "ModelSpec",
+    "ProviderConfig",
     "build_model",
     "build_models",
     "describe_response_format",
     "load_model_config",
-    "missing_keys_hint",
-    "resolve_spec",
 ]

@@ -21,8 +21,10 @@ from typing import Optional
 PROMPT_FILES = (
     "sys_prompt_cv.txt",
     "sys_prompt_highlight.txt",
-    "sys_review_prompt.txt",
+    "sys_prompt_review.txt",
     "sys_prompt_letter.txt",
+    "sys_prompt_analysis.txt",
+    "sys_prompt_jd_detect.txt",
 )
 TEMPLATE_FILE = "resume.tex.jinja"
 MODELS_FILE = "models.toml"

@@ -1,29 +1,33 @@
 # jobstitch model configuration
 # =============================
-# jobstitch calls exactly three models, one per job:
+# jobstitch calls exactly three models, one per job, all through the SAME
+# provider (jobstitch assumes a single API key):
 #
 #   summary    JD detection, JD analysis and the cover letter
 #   cv         CV writing and the content review
 #   highlight  the **bold**/*italic* keyword pass over the validated CV
 #
-# Each table below is self-contained — endpoint, credentials, model name and
-# generation settings — and nothing about a provider is baked into the code.
-# Any OpenAI-compatible /chat/completions endpoint works: point `base_url` at
-# it and set `model` to whatever it serves. The `model` values here are
-# examples; change them to the ones your account has access to.
+# [provider] declares the endpoint once; each [models.*] table below is just
+# the model name and generation settings for that job. Any OpenAI-compatible
+# /chat/completions endpoint works — point base_url (or base_url_env) at it
+# and set each model's `model` to whatever your account has access to.
 #
-# A model whose `api_key_env` variable is empty borrows the endpoint (and model
-# name) of one that is configured, and says so at startup — so a single
-# provider key is enough to run the whole pipeline.
+# Docker: model, temperature, thinking and structured_output can each be
+# overridden per role with an env var, without touching this file —
+# JOBSTITCH_<ROLE>_<FIELD>, e.g. JOBSTITCH_CV_MODEL, JOBSTITCH_CV_TEMPERATURE,
+# JOBSTITCH_CV_THINKING, JOBSTITCH_CV_STRUCTURED_OUTPUT (roles: SUMMARY, CV,
+# HIGHLIGHT). See .env.example.
+
+[provider]
+api_key_env  = "MODEL_API_KEY"
+base_url_env = "MODEL_BASE_URL"
 
 [defaults]
 timeout_seconds = 600
 
 
-# --- Per-model keys ----------------------------------------------------------
+# --- Per-model settings -------------------------------------------------
 # model           (required) model name sent to the endpoint
-# api_key_env     (required) env var holding the API key
-# base_url_env    (required) env var holding the endpoint URL
 # temperature     sampling temperature; omit to use the provider default
 # max_tokens      overrides [defaults].max_tokens for this model; omitted here
 #                 and in [defaults] means max_tokens is left out of the request
@@ -50,8 +54,6 @@ timeout_seconds = 600
 # web research (on the employer, for a direct posting from a named company).
 [models.summary]
 model             = "qwen3.8-flash"
-api_key_env       = "DASHSCOPE_API_KEY"
-base_url_env      = "DASHSCOPE_BASE_URL"
 structured_output = "json_object"
 temperature       = 0.1
 thinking          = "on"
@@ -72,8 +74,6 @@ web_search        = true
 # too little behind for the JSON.
 [models.cv]
 model             = "qwen3.8-max"
-api_key_env       = "DASHSCOPE_API_KEY"
-base_url_env      = "DASHSCOPE_BASE_URL"
 structured_output = "json_schema_strict"
 max_tokens        = 16000
 thinking          = "on"
@@ -84,38 +84,8 @@ thinking_budget   = 6000
 # burns the whole output budget on reasoning tokens and returns truncated JSON.
 [models.highlight]
 model             = "qwen3.8-flash"
-api_key_env       = "DASHSCOPE_API_KEY"
-base_url_env      = "DASHSCOPE_BASE_URL"
 structured_output = "json_object"
 temperature       = 0.1
 thinking          = "off"
 
 
-# --- Other providers ---------------------------------------------------------
-# Copy the endpoint keys into the tables above (there are only ever three
-# models — these are settings to paste, not extra models to declare).
-#
-# OpenAI — no thinking switch in the request body, so leave thinking = "auto"
-# and let reasoning_effort do the work:
-#   model             = "gpt-4o"
-#   api_key_env       = "OPENAI_API_KEY"
-#   base_url_env      = "OPENAI_BASE_URL"
-#   structured_output = "json_schema"
-#   thinking          = "auto"
-#
-# DeepSeek — reasoning_effort and thinking_budget can't be sent together,
-# so declare only the budget and it alone controls thinking:
-#   model             = "deepseek-chat"
-#   api_key_env       = "DEEPSEEK_API_KEY"
-#   base_url_env      = "DEEPSEEK_BASE_URL"
-#   structured_output = "json_object"
-#   thinking          = "on"
-#   thinking_budget   = 6000
-#
-# A local model needs no key, but `api_key_env` is required — point it at a
-# variable holding any placeholder string (see .env.example):
-#   model             = "llama3.1"
-#   api_key_env       = "OLLAMA_API_KEY"
-#   base_url_env      = "OLLAMA_BASE_URL"
-#   structured_output = "json_object"
-#   thinking          = "auto"

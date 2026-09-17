@@ -22,17 +22,21 @@ from jobstitch_contracts import RenderedCV
 from ..jobstore import RESULT, STATUS, JobDir
 from ..observability import Run, use_run
 from .deps import AppState, save_log
-from .errors import error_message, log_failure, status_for
-
-#: Builds the CV. Takes the scratch directory and a progress sink; returns the
-#: merged document, the LaTeX and PDF it was rendered into, and what it cost.
-BuildFn = Callable[
-    [Path, Callable[[str, str], None]], Tuple[Dict[str, Any], str, bytes, str]
-]
+from .errors import describe_failure, log_failure
 
 
-def start(state: AppState, job: JobDir, run: Run, build: BuildFn) -> None:
-    """Hand one accepted job to a thread. Returns as soon as it is running."""
+def start(
+    state: AppState,
+    job: JobDir,
+    run: Run,
+    build: Callable[[Path, Callable[[str, str], None]], Tuple[Dict[str, Any], str, bytes, str]],
+) -> None:
+    """Hand one accepted job to a thread. Returns as soon as it is running.
+
+    ``build`` is what produces the CV: it is given the scratch directory and a
+    progress sink, and returns the merged document, the LaTeX and the PDF it
+    was rendered into, and one line saying what the run cost.
+    """
 
     def progress(status: str, detail: str) -> None:
         job.write(STATUS, {"state": "running", "status": status, "detail": detail})
@@ -50,8 +54,9 @@ def start(state: AppState, job: JobDir, run: Run, build: BuildFn) -> None:
                 ending = {"state": "done", "status": "END", "detail": summary}
             except Exception as exc:  # noqa: BLE001 — stored, not swallowed
                 log_failure(exc, "POST /v1/cv")
+                status, message = describe_failure(exc)
                 ending = {"state": "failed", "status": "END", "detail": "",
-                          "http_status": status_for(exc), "error": error_message(exc)}
+                          "http_status": status, "error": message}
             state.job_slots.release()
             job.drop_work()
             save_log(job, run)
@@ -62,4 +67,4 @@ def start(state: AppState, job: JobDir, run: Run, build: BuildFn) -> None:
     Thread(target=work, name=f"jobstitch-{job.request_id}", daemon=True).start()
 
 
-__all__ = ["start", "BuildFn"]
+__all__ = ["start"]

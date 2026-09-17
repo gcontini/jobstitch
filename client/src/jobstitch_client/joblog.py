@@ -15,6 +15,17 @@ from typing import List, Sequence
 from jobstitch_contracts import LogEntry
 
 
+def _header(request_id: str, count: int) -> str:
+    """One request's banner, the same in ``log.log`` and on stdout."""
+    return f"--- server request {request_id} ({count} line(s)) ---"
+
+
+def _entry(entry: LogEntry) -> str:
+    """One server line, indented under the banner it belongs to."""
+    return (f"  {entry.ts.isoformat(timespec='seconds')} "
+            f"{entry.level:<7} [{entry.stage}] {entry.message}")
+
+
 class JobLog:
     """Collects lines for one job, echoing them as it goes."""
 
@@ -30,10 +41,9 @@ class JobLog:
 
     def server(self, request_id: str, entries: Sequence[LogEntry]) -> None:
         """Fold in what the server did during one request."""
-        self._write(f"--- server request {request_id} ---")
+        self._write(_header(request_id, len(entries)))
         for entry in entries:
-            self._write(f"  {entry.ts.isoformat(timespec='seconds')} "
-                        f"{entry.level:<7} [{entry.stage}] {entry.message}")
+            self._write(_entry(entry))
 
     def write(self, path: Path) -> Path:
         """Write the log next to the CV it belongs to."""
@@ -46,10 +56,7 @@ class JobLog:
 
 def format_entries(request_id: str, entries: Sequence[LogEntry]) -> str:
     """The same rendering, for ``jobstitch logs <request_id>`` on stdout."""
-    header = f"--- server request {request_id} ({len(entries)} line(s)) ---"
-    body = [f"{e.ts.isoformat(timespec='seconds')} {e.level:<7} [{e.stage}] {e.message}"
-            for e in entries]
-    return "\n".join([header, *body])
+    return "\n".join([_header(request_id, len(entries)), *map(_entry, entries)])
 
 
 __all__ = ["JobLog", "format_entries"]

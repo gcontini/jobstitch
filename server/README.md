@@ -19,7 +19,7 @@ answer waits. The newest 200 are kept and the rest are dropped.
 ## Run it
 
 ```bash
-docker build -f server/Dockerfile -t jobstitch-server .
+docker build -t jobstitch-server .
 docker run --rm -p 8080:8080 --env-file .env jobstitch-server
 curl localhost:8080/healthz
 ```
@@ -47,19 +47,20 @@ settings below already wired.
 
 ### API keys
 
-The server calls three models. Which, and where, is declared in
-`src/jobstitch_server/resources/models.toml`; the keys themselves come from
-the environment:
+The server calls three models, all through one provider (jobstitch assumes a
+single API key). The endpoint is declared once, in the `[provider]` table of
+`resources/models.toml`; the key itself comes from the
+environment:
 
 ```bash
-DASHSCOPE_API_KEY=sk-...
-DASHSCOPE_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+MODEL_API_KEY=sk-...
+MODEL_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 ```
 
 Any OpenAI-compatible `/chat/completions` endpoint works — OpenAI, DeepSeek, a
-local Ollama. `models.toml` ships with those as commented blocks to paste in.
-A model whose key is not set borrows the endpoint of one that is, so a single
-key runs the whole pipeline.
+local Ollama. Switching providers is just replacing those two values in
+`.env`; `models.toml`'s `[provider]` table names the same two variables and
+doesn't need to change.
 
 | Role | What it does | Shipped as |
 |---|---|---|
@@ -70,6 +71,20 @@ key runs the whole pipeline.
 Thinking is off for the highlighter deliberately: letting a reasoning model
 think about inserting markers burns the output budget and returns truncated
 JSON.
+
+Each role's `model`, `temperature`, `thinking` and `structured_output` (JSON
+output mode) can also be overridden per role with an env var, without editing
+`models.toml` — handy for a Docker deployment:
+
+```bash
+JOBSTITCH_CV_MODEL=qwen-max
+JOBSTITCH_CV_TEMPERATURE=0.2
+JOBSTITCH_CV_THINKING=off
+JOBSTITCH_CV_STRUCTURED_OUTPUT=json_object
+```
+
+The pattern is `JOBSTITCH_<ROLE>_<FIELD>` for `SUMMARY`, `CV` and
+`HIGHLIGHT`; see `.env.example` for the full list.
 
 ### Environment
 
@@ -212,7 +227,7 @@ curl -s localhost:8080/v1/cv/$ID > cv.json # once it says END
 | `jd` | required | The posting |
 | `candidate_profile` | required | Everything you have done — what the model tailors from |
 | `candidate_data` | required | Your name, email and the rest — what the template prints |
-| `sys_prompt_cv`, `sys_prompt_highlight`, `sys_review_prompt` | optional | Replace a prompt for this request |
+| `sys_prompt_cv`, `sys_prompt_highlight`, `sys_prompt_review` | optional | Replace a prompt for this request |
 | `template` | optional | Replace `resume.tex.jinja` |
 | `signature` | optional | Your signature PNG |
 | `temperature` | optional | Tuning |
@@ -340,7 +355,6 @@ the LaTeX log before it goes back.
 | `409` `job_not_ready` from `GET /v1/cv/{id}` | The job is still running — poll `/status` until it says `END` |
 | `504` | The compile, or the whole run, hit its timeout |
 | `"status": "degraded"` on `/healthz` | No `pdflatex` on PATH — CV and render calls will fail |
-| Model name in `/healthz` is not what you configured | A role with no API key borrowed a configured endpoint; the startup log says which |
 
 ---
 

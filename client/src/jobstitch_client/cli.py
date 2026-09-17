@@ -1,7 +1,7 @@
 """``jobstitch`` — the command line.
 
 Parses, builds the :class:`Config` (flags beat the environment beats
-``jobstitch.toml`` beats what is next to the executable) and hands over to a
+``jobstitch.toml`` beats what is in the current folder) and hands over to a
 mode. It contains no logic of its own beyond that.
 """
 
@@ -23,9 +23,12 @@ from .ui import fail
 EPILOGUE = """\
 files:
   Put candidate_profile.json, candidate_data.json, pers_preferences.md and
-  candidate_signature.png next to the jobstitch executable and they are picked
-  up by name. A prompt or resume.tex.jinja found there overrides the
-  server's default; anything absent falls back to it.
+  candidate_signature.png in the current folder and they are picked up by
+  name. A prompt or resume.tex.jinja found there overrides the server's
+  default; anything absent falls back to it.
+
+  --out defaults to the current folder, and watch's --in defaults to
+  ./incoming (created if missing).
 
 examples:
   jobstitch clipboard --out ~/applications
@@ -47,7 +50,7 @@ def global_options() -> argparse.ArgumentParser:
     common.add_argument("--config", type=Path, default=argparse.SUPPRESS,
                         help="Path to jobstitch.toml.")
     common.add_argument("--data-dir", type=Path, default=argparse.SUPPRESS,
-                        help="Folder to look in for your files (before the executable's own).")
+                        help="Folder to look in for your files (before the current folder).")
     common.add_argument("--server", default=argparse.SUPPRESS,
                         help="Server URL (default: http://localhost:8080).")
     common.add_argument("--token", default=argparse.SUPPRESS,
@@ -74,8 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
     modes = parser.add_subparsers(dest="mode", required=True, metavar="MODE")
 
     def add_job_flags(sub: argparse.ArgumentParser) -> None:
-        sub.add_argument("--out", type=Path, required=True,
-                         help="Output folder (working/, error/, discarded/, cv/).")
+        sub.add_argument("--out", type=Path,
+                         help="Output folder (working/, error/, discarded/, cv/). "
+                              "Default: the current folder.")
         sub.add_argument("--cover-letter", choices=COVER_LETTER_MODES,
                          help="Also write a cover letter (default: no).")
         sub.add_argument("--yes", action="store_true",
@@ -89,8 +93,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch = modes.add_parser("watch", help="Watch a folder for postings.",
                               parents=[common])
-    watch.add_argument("--in", dest="inbox", type=Path, required=True,
-                       help="Folder to watch for job description files.")
+    watch.add_argument("--in", dest="inbox", type=Path,
+                       help="Folder to watch for job description files. "
+                            "Default: ./incoming (created if missing).")
     add_job_flags(watch)
 
     submit = modes.add_parser("submit", help="Process one job description file.",
@@ -149,11 +154,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             return submit_raw_mode.run(config, args.jd_file, args.output)
 
         common = {"assume_yes": args.yes, "track": not args.no_xlsx}
+        out = args.out or Path.cwd()
         if args.mode == "clipboard":
-            return clipboard_mode.run(config, args.out, **common)
+            return clipboard_mode.run(config, out, **common)
         if args.mode == "watch":
-            return watch_mode.run(config, args.inbox, args.out, **common)
-        return submit_mode.run(config, args.jd_file, args.out, **common)
+            return watch_mode.run(config, args.inbox, out, **common)
+        return submit_mode.run(config, args.jd_file, out, **common)
     except ConfigError as exc:
         fail(str(exc))
     return 0

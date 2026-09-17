@@ -110,5 +110,10 @@ def fail(message: str, code: int = 1) -> None:
     raise SystemExit(code)
 
 
+def warn(message: str) -> None:
+    """A non-fatal heads-up: stderr, execution continues."""
+    print(f"⚠ {message}", file=sys.stderr, flush=True)
+
+
 __all__ = ["Decision", "Confirmer", "PromptConfirmer", "AutoConfirmer",
-           "print_analysis", "ask_recovery", "fail"]
+           "print_analysis", "ask_recovery", "fail", "warn"]

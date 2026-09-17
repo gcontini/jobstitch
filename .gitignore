@@ -32,3 +32,6 @@ dist/
 *.fls
 *.synctex.gz
 *.out
+
+.qwen
+.vscode

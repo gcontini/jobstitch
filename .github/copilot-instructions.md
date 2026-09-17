@@ -86,8 +86,11 @@ dropped when it ends; a request's own directory is the only thing kept
 - `observability.py` — `Run`/`NullRun`, `current_run` contextvar, `stage()`
   context manager, the logging handler that turns log records into
   `LogEntry`s for the run.
-- `resources/` — the impersonal defaults baked into the image: four prompts,
-  `resume.tex.jinja`, `models.toml`, a placeholder signature PNG.
+
+**`server/resources/`** — the impersonal defaults baked into the image: four
+prompts, `resume.tex.jinja`, `models.toml`, a placeholder signature PNG.
+Packaged as `jobstitch_server.resources` (see `server/pyproject.toml`) so
+`importlib.resources` still finds it despite living outside `src/`.
 
 **`client/src/jobstitch_client/`** — your data, a bearer token, no Python
 required to run it (PyInstaller `--onefile`)
@@ -173,12 +176,14 @@ required to run it (PyInstaller `--onefile`)
 - Python 3.12, `uv` workspace (`pyproject.toml` at the root plus one per
   package); `uv sync` installs all three in editable mode. Console scripts:
   `jobstitch-api` (server), `jobstitch` (client).
-- LLM access via any OpenAI-compatible endpoint — `DASHSCOPE_API_KEY`,
-  `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or a local Ollama; see
-  `.env.example`. Roles and models are declared in
-  `server/src/jobstitch_server/resources/models.toml`
-  (`summary`/`cv`/`highlight`); a role with no key set borrows the endpoint
-  of one that has it.
+- LLM access via any OpenAI-compatible endpoint — one provider, one API key
+  (`MODEL_API_KEY`/`MODEL_BASE_URL`; see `.env.example`), declared once in
+  the `[provider]` table of
+  `server/resources/models.toml`. The three roles
+  (`summary`/`cv`/`highlight`) each declare only model name and generation
+  settings, which can also be overridden per role via
+  `JOBSTITCH_<ROLE>_<FIELD>` env vars (model/temperature/thinking/
+  structured_output).
 - `%`-style lazy logging args, never f-strings inside `logger.*` — sanitized
   LaTeX can reach a log line and a literal `%` would break the formatter.
 - LaTeX templates use Jinja delimiters `\VAR{}`/`\BLOCK{}`; escaping is done
@@ -187,7 +192,7 @@ required to run it (PyInstaller `--onefile`)
 - Console prints in the client use `flush=True` (long-lived watch/clipboard
   processes).
 - Docker: **classic builder only** — no BuildKit features, no heredocs in a
-  Dockerfile (`server/Dockerfile`, built with `DOCKER_BUILDKIT=0`).
+  Dockerfile (`Dockerfile`, at the repo root, built with `DOCKER_BUILDKIT=0`).
 - PyInstaller (`client/packaging/jobstitch.spec`), not Cython — Cython still
   needs an interpreter and does not produce a standalone exe. Build on the
   target OS; it does not cross-compile.
@@ -211,7 +216,7 @@ uv run pytest server/tests                 # one package only
 uv run pytest -k architecture              # the dependency-direction rule
 
 # the server image (classic builder only)
-DOCKER_BUILDKIT=0 docker build -f server/Dockerfile -t jobstitch-server .
+DOCKER_BUILDKIT=0 docker build -t jobstitch-server .
 docker run --rm -p 8080:8080 --env-file .env jobstitch-server
 
 # the client executable (build on the OS you are targeting)

@@ -35,7 +35,7 @@ jobs:
       # Classic builder, as everywhere else: the Dockerfile must stay
       # buildable without BuildKit.
       - name: Build the server image
-        run: DOCKER_BUILDKIT=0 docker build -f server/Dockerfile -t jobstitch-server .
+        run: DOCKER_BUILDKIT=0 docker build -t jobstitch-server .
       - name: Start it and check it is healthy
         run: |
           docker run -d --name api -p 8080:8080 \

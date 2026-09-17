@@ -25,12 +25,12 @@ your own and no LaTeX install.
    | `pers_preferences.md` | What you want from a job, in prose. Scored against each posting. **Required** for analysis. |
    | `candidate_signature.png` | Your signature image. Optional — a blank one is used otherwise. |
    | `resume.tex.jinja` | Your own LaTeX template. Optional — the server's is used otherwise. |
-   | `sys_prompt_cv.txt`, `sys_prompt_highlight.txt`, `sys_review_prompt.txt`, `sys_prompt_letter.txt` | Your own prompts. Optional, same. |
+   | `sys_prompt_cv.txt`, `sys_prompt_highlight.txt`, `sys_prompt_review.txt`, `sys_prompt_letter.txt` | Your own prompts. Optional, same. |
 
    Start from the fictional set in [`examples/candidate/`](../examples/candidate)
-   — copy them beside the binary and edit.
+   — copy them into your current folder and edit.
 
-3. **Point it at a server.** Either a `jobstitch.toml` next to the binary:
+3. **Point it at a server.** Either a `jobstitch.toml` in your current folder:
 
    ```toml
    server_url = "https://jobstitch.example.run.app"
@@ -51,7 +51,7 @@ your own and no LaTeX install.
    ```
 
 Everything resolves in this order: **command line → environment →
-`jobstitch.toml` → file next to the binary → the server's default.** The
+`jobstitch.toml` → file in the current folder → the server's default.** The
 `[files]` section of `jobstitch.toml` can point anywhere:
 
 ```toml
@@ -155,9 +155,9 @@ reasonably soon; an id that has been dropped gives `404`.
 
 | Flag | Applies to | What it does |
 |---|---|---|
-| `--out DIR` | clipboard, watch, submit | The output folder. Required. |
+| `--out DIR` | clipboard, watch, submit | The output folder. Default: the current folder. |
 | `-o FILE` | submit-raw | Where to write one output: `.pdf`, `.json` or `.tex`. Repeatable. |
-| `--in DIR` | watch | The folder to watch. Required. |
+| `--in DIR` | watch | The folder to watch. Default: `./incoming` (created if missing). |
 | `--cover-letter no\|yes\|letter_only` | clipboard, watch, submit | Also write a cover letter, or write *only* one. Default `no`. |
 | `--yes` | clipboard, watch, submit | Submit every valid posting without asking. Unattended runs spend tokens on their own. |
 | `--no-xlsx` | clipboard, watch, submit | Do not record delivered CVs in the spreadsheet. |
@@ -219,7 +219,7 @@ finished, `jobstitch logs <request id>`.
 |---|---|
 | `cannot reach the jobstitch server at …` | The server is down or the URL is wrong. `curl <url>/healthz` to check. |
 | `401` / `a valid bearer token is required` | The server wants a token: set `token` in `jobstitch.toml` or pass `--token`. |
-| `candidate_profile.json is required but was not found` | Put it next to the binary, or name it under `[files]` in the config. |
+| `candidate_profile.json is required but was not found` | Put it in the current folder, or name it under `[files]` in the config. |
 | `no clipboard here: neither DISPLAY nor WAYLAND_DISPLAY…` | Install `xclip` or `wl-clipboard`, or use `watch` instead — it needs no clipboard. |
 | `429` / `all job slots are busy` | The server is at capacity. Try again shortly. |
 | `clipboard: not a posting (412 chars, nothing sent)` | What you copied is a fragment, not a posting. Nothing was sent anywhere. |

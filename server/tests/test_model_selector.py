@@ -5,15 +5,17 @@ import pytest
 from jobstitch_server import model_selector as ms
 
 TOML = """
+[provider]
+api_key_env = "PROVIDER_KEY"
+base_url_env = "PROVIDER_URL"
+base_url = "https://provider.example/v1"
+
 [defaults]
 max_tokens = 8000
 timeout_seconds = 30
 
 [models.summary]
 model = "summary-1"
-api_key_env = "SUMMARY_KEY"
-base_url_env = "SUMMARY_URL"
-base_url = "https://summary.example/v1"
 temperature = 0.1
 reasoning_effort = "low"
 thinking = "on"
@@ -21,8 +23,6 @@ web_search = true
 
 [models.cv]
 model = "cv-1"
-api_key_env = "CV_KEY"
-base_url = "https://cv.example/v1"
 structured_output = "json_schema_strict"
 thinking = "on"
 thinking_budget = 6000
@@ -30,8 +30,6 @@ reasoning_effort = "high"
 
 [models.highlight]
 model = "highlight-1"
-api_key_env = "HIGHLIGHT_KEY"
-base_url = "https://highlight.example/v1"
 thinking = "off"
 reasoning_effort = "high"
 """
@@ -48,9 +46,8 @@ def config(tmp_path):
 
 
 @pytest.fixture
-def all_keys(monkeypatch):
-    for var in ("SUMMARY_KEY", "CV_KEY", "HIGHLIGHT_KEY"):
-        monkeypatch.setenv(var, "x")
+def provider_key(monkeypatch):
+    monkeypatch.setenv("PROVIDER_KEY", "x")
 
 
 # --- parsing + validation ---------------------------------------------------
@@ -80,9 +77,9 @@ def test_unknown_key_is_rejected(tmp_path):
         ms.load_model_config(write(tmp_path, TOML + '\ntyop = 1\n'))
 
 
-def test_missing_required_key_is_rejected(tmp_path):
-    toml = TOML.replace('api_key_env = "CV_KEY"', "")
-    with pytest.raises(ValueError, match="api_key_env"):
+def test_missing_model_name_is_rejected(tmp_path):
+    toml = TOML.replace('model = "cv-1"', "")
+    with pytest.raises(ValueError, match="missing 'model'"):
         ms.load_model_config(write(tmp_path, toml))
 
 
@@ -107,6 +104,65 @@ def test_capability_values_are_checked_against_the_allowed_set(tmp_path, bad):
     toml = TOML.replace('thinking = "off"\nreasoning_effort = "high"', bad)
     with pytest.raises(ValueError, match="expected one of"):
         ms.load_model_config(write(tmp_path, toml))
+
+
+# --- [provider] --------------------------------------------------------------
+def test_missing_provider_table_is_rejected(tmp_path):
+    toml = TOML[TOML.index("[defaults]"):]
+    with pytest.raises(ValueError, match=r"\[provider\]"):
+        ms.load_model_config(write(tmp_path, toml))
+
+
+def test_missing_provider_key_is_rejected(tmp_path):
+    toml = TOML.replace('api_key_env = "PROVIDER_KEY"', "")
+    with pytest.raises(ValueError, match="api_key_env"):
+        ms.load_model_config(write(tmp_path, toml))
+
+
+def test_provider_without_any_base_url_is_rejected(tmp_path):
+    toml = TOML.replace('base_url_env = "PROVIDER_URL"', "").replace(
+        'base_url = "https://provider.example/v1"', ""
+    )
+    with pytest.raises(ValueError, match="base_url"):
+        ms.load_model_config(write(tmp_path, toml))
+
+
+def test_unknown_provider_key_is_rejected(tmp_path):
+    toml = TOML.replace("[provider]", "[provider]\ntyop = 1")
+    with pytest.raises(ValueError, match="unknown key"):
+        ms.load_model_config(write(tmp_path, toml))
+
+
+def test_base_url_env_wins_over_literal(config, monkeypatch):
+    provider = config.provider
+    monkeypatch.setenv("PROVIDER_URL", "https://override.example/v1")
+    assert provider.resolved_base_url() == "https://override.example/v1"
+    monkeypatch.delenv("PROVIDER_URL")
+    assert provider.resolved_base_url() == "https://provider.example/v1"
+
+
+# --- env overrides -----------------------------------------------------------
+def test_env_overrides_the_fundamental_settings(tmp_path, monkeypatch):
+    # summary has no thinking_budget in the fixture, so overriding thinking
+    # away from "on" doesn't collide with it (unlike cv).
+    monkeypatch.setenv("JOBSTITCH_SUMMARY_MODEL", "summary-2")
+    monkeypatch.setenv("JOBSTITCH_SUMMARY_TEMPERATURE", "0.7")
+    monkeypatch.setenv("JOBSTITCH_SUMMARY_THINKING", "off")
+    monkeypatch.setenv("JOBSTITCH_SUMMARY_STRUCTURED_OUTPUT", "json_schema")
+    config = ms.load_model_config(write(tmp_path, TOML))
+    summary = config.models["summary"]
+    assert summary.model == "summary-2"
+    assert summary.temperature == 0.7
+    assert summary.thinking == "off"
+    assert summary.structured_output == "json_schema"
+    # Untouched roles keep their models.toml values.
+    assert config.models["cv"].model == "cv-1"
+
+
+def test_a_non_numeric_temperature_override_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("JOBSTITCH_CV_TEMPERATURE", "hot")
+    with pytest.raises(ValueError, match="JOBSTITCH_CV_TEMPERATURE"):
+        ms.load_model_config(write(tmp_path, TOML))
 
 
 # --- request shaping --------------------------------------------------------
@@ -139,16 +195,8 @@ def test_thinking_budget_drops_conflicting_reasoning_effort(config):
     assert config.models["summary"].effective_reasoning_effort() == "low"
 
 
-def test_base_url_env_wins_over_literal(config, monkeypatch):
-    spec = config.models["summary"]
-    monkeypatch.setenv("SUMMARY_URL", "https://override.example/v1")
-    assert spec.resolved_base_url() == "https://override.example/v1"
-    monkeypatch.delenv("SUMMARY_URL")
-    assert spec.resolved_base_url() == "https://summary.example/v1"
-
-
 # --- building ---------------------------------------------------------------
-def test_build_models_carries_the_declared_settings(config, all_keys):
+def test_build_models_carries_the_declared_settings(config, provider_key):
     models = ms.build_models(config, quiet=True)
     assert sorted(models) == ["cv", "highlight", "summary"]
     summary = models["summary"]
@@ -161,35 +209,15 @@ def test_build_models_carries_the_declared_settings(config, all_keys):
     assert models["highlight"].temperature is None  # not declared -> provider default
 
 
-def test_a_model_without_a_key_borrows_a_configured_endpoint(config, monkeypatch):
-    monkeypatch.setenv("CV_KEY", "x")
-    monkeypatch.delenv("HIGHLIGHT_KEY", raising=False)
-    monkeypatch.delenv("SUMMARY_KEY", raising=False)
-
-    highlight = ms.resolve_spec("highlight", config)
-    # Endpoint and model name come from cv...
-    assert highlight.model == "cv-1"
-    assert highlight.base_url == "https://cv.example/v1"
-    assert highlight.structured_output == "json_schema_strict"
-    # ...but the role keeps what makes it the highlighter.
-    assert highlight.role == "highlight"
-    assert highlight.thinking_extra_body() == {"enable_thinking": False}
-
-
-def test_a_configured_model_is_used_as_declared(config, all_keys):
-    assert ms.resolve_spec("cv", config) is config.models["cv"]
-
-
-def test_no_keys_at_all_raises_with_an_env_hint(config, monkeypatch):
-    for var in ("SUMMARY_KEY", "CV_KEY", "HIGHLIGHT_KEY"):
-        monkeypatch.delenv(var, raising=False)
-    with pytest.raises(RuntimeError, match="CV_KEY, HIGHLIGHT_KEY, SUMMARY_KEY"):
-        ms.resolve_spec("cv", config)
+def test_build_model_raises_naming_the_provider_var(config, monkeypatch):
+    monkeypatch.delenv("PROVIDER_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="PROVIDER_KEY"):
+        ms.build_model("cv", config)
 
 
 def test_unknown_role_is_a_key_error(config):
     with pytest.raises(KeyError):
-        ms.resolve_spec("proofreader", config)
+        ms.build_model("proofreader", config)
 
 
 # --- ModelSelector capabilities --------------------------------------------

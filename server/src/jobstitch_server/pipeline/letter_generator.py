@@ -17,12 +17,17 @@ from typing import Any, Dict, List, Mapping, Optional
 from ..model_selector import ModelSelector
 from ..observability import LOGGER_ROOT, stage
 from .errors import ModelOutputError
+from .parsing import strip_fences
 
 logger = logging.getLogger(f"{LOGGER_ROOT}.letter")
 
 #: The letter must read as a letter: bounds catch a stub and a runaway alike.
 MIN_WORDS = 180
 MAX_WORDS = 450
+
+#: Generate -> validate rounds; the validation error is fed back between them,
+#: the same self-correction the CV pipeline uses.
+MAX_ATTEMPTS = 2
 
 
 class LetterGenerator:
@@ -34,9 +39,6 @@ class LetterGenerator:
         The ``summary`` model — the only role allowed to run web search.
     system_prompt:
         The letter prompt for this run (default, or the request's override).
-    max_attempts:
-        Generate -> validate rounds; the validation error is fed back between
-        them, the same self-correction the CV pipeline uses.
     """
 
     def __init__(
@@ -44,10 +46,8 @@ class LetterGenerator:
         summary_model: ModelSelector,
         *,
         system_prompt: str,
-        max_attempts: int = 2,
     ) -> None:
         self.summary_model = summary_model
-        self.max_attempts = max_attempts
         self._system_message = {"role": "system", "content": system_prompt}
 
     def _should_research(self, analysis: Mapping[str, Any]) -> bool:
@@ -126,17 +126,7 @@ class LetterGenerator:
         content = response.choices[0].message.content
         if not content:
             raise ValueError("LLM returned empty content")
-
-        text = content.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines and lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
-
-        return text
+        return strip_fences(content)
 
     @staticmethod
     def _validate_letter(text: str) -> None:
@@ -195,9 +185,9 @@ class LetterGenerator:
         ]
 
         search_fallback_tried = not research
-        for attempt in range(self.max_attempts):
+        for attempt in range(MAX_ATTEMPTS):
             try:
-                with stage("letter.generate", attempt=attempt + 1):
+                with stage("letter.generate"):
                     resp = selector.completions_create(messages)
             except Exception as e:
                 if not search_fallback_tried:
@@ -236,7 +226,7 @@ class LetterGenerator:
                 )
 
         raise ModelOutputError(
-            f"Could not produce a valid cover letter after {self.max_attempts} attempts.",
+            f"Could not produce a valid cover letter after {MAX_ATTEMPTS} attempts.",
             stage="letter.generate",
         )
 

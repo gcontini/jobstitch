@@ -1,3 +1,6 @@
+# Builds the server as a docker. it is here because some cloud build don't 
+# understand the build in a subfolder
+
 # The jobstitch API server: the LaTeX toolchain, the Python environment and
 # uvicorn. Stateless — it mounts nothing and stores nothing.
 #
@@ -34,6 +37,7 @@ RUN uv sync --frozen --no-dev --package jobstitch-server --no-install-workspace
 # runtime stage needs nothing but the venv itself.
 COPY contracts/src ./contracts/src
 COPY server/src ./server/src
+COPY server/resources ./server/resources
 RUN uv sync --frozen --no-dev --package jobstitch-server --no-editable
 
 

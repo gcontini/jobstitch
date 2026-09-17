@@ -1,16 +1,14 @@
 """Finding your files without being told where they are.
 
-A downloaded executable has no install layout, so the rule is: put your files
-next to it. Anything named below that sits beside the binary (or beside the
-config file, or in the directory you are running from) is picked up by name.
-An explicit path in ``jobstitch.toml`` or on the command line always wins, and
-what cannot be found locally falls back to the server's default.
+The rule is: put your files in the current folder. Anything named below that
+sits in the directory you are running from (or in ``--data-dir``) is picked up
+by name. An explicit path in ``jobstitch.toml`` or on the command line always
+wins, and what cannot be found locally falls back to the server's default.
 """
 
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -23,28 +21,16 @@ KNOWN_FILES = (
     "resume.tex.jinja",
     "sys_prompt_cv.txt",
     "sys_prompt_highlight.txt",
-    "sys_review_prompt.txt",
+    "sys_prompt_review.txt",
     "sys_prompt_letter.txt",
 )
 
 CONFIG_NAME = "jobstitch.toml"
 
 
-def executable_dir() -> Path:
-    """The folder the binary is in — a PyInstaller bundle included.
-
-    ``sys.executable`` is the python interpreter when running from source and
-    the bundled binary when frozen, which is exactly the distinction that
-    matters here.
-    """
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path.cwd()
-
-
 def search_dirs(extra: Optional[Path] = None) -> List[Path]:
-    """Where to look, in order: an explicit folder, the binary's, the cwd."""
-    candidates = [extra, executable_dir(), Path.cwd()]
+    """Where to look, in order: an explicit folder, then the current one."""
+    candidates = [extra, Path.cwd()]
     seen: List[Path] = []
     for candidate in candidates:
         if candidate is None:
@@ -85,5 +71,4 @@ def discover_files(extra: Optional[Path] = None) -> Dict[str, Path]:
     return found
 
 
-__all__ = ["KNOWN_FILES", "CONFIG_NAME", "executable_dir", "search_dirs",
-           "find_config", "discover_files"]
+__all__ = ["KNOWN_FILES", "CONFIG_NAME", "search_dirs", "find_config", "discover_files"]

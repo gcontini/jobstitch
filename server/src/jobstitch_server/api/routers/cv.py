@@ -53,7 +53,7 @@ async def create_cv(
     sys_prompt_highlight: Optional[UploadFile] = File(
         None, description="Override the highlighting prompt"
     ),
-    sys_review_prompt: Optional[UploadFile] = File(
+    sys_prompt_review: Optional[UploadFile] = File(
         None, description="Override the review prompt"
     ),
     template: Optional[UploadFile] = File(
@@ -79,8 +79,8 @@ async def create_cv(
         sys_prompt_highlight=await text_part(
             sys_prompt_highlight, name="sys_prompt_highlight", max_bytes=limit
         ),
-        sys_review_prompt=await text_part(
-            sys_review_prompt, name="sys_review_prompt", max_bytes=limit
+        sys_prompt_review=await text_part(
+            sys_prompt_review, name="sys_prompt_review", max_bytes=limit
         ),
         template_source=await text_part(template, name="template", max_bytes=limit),
         signature=await bytes_part(signature, name="signature", max_bytes=limit),

@@ -37,15 +37,22 @@ MAX_MESSAGE_CHARS = 4000
 
 
 class Run:
-    """The log lines and LLM calls of one request."""
+    """The log lines and LLM calls of one request.
 
-    def __init__(self, request_id: str) -> None:
+    ``collect=False`` discards everything, which is what :data:`NULL_RUN` — the
+    default outside a request — does.
+    """
+
+    def __init__(self, request_id: str, *, collect: bool = True) -> None:
         self.request_id = request_id
+        self._collect = collect
         self._logs: List[LogEntry] = []
         self._dropped = 0
 
     # --- collection (called by the handler and by ModelSelector) -----------
     def add_log(self, level: str, stage: str, message: str) -> None:
+        if not self._collect:
+            return
         if len(self._logs) >= MAX_LOG_ENTRIES:
             self._dropped += 1
             return
@@ -72,21 +79,10 @@ class Run:
         return list(self._logs)
 
 
-class NullRun(Run):
-    """Discards everything. The default outside a request."""
-
-    def __init__(self) -> None:
-        super().__init__(request_id="-")
-
-    def add_log(self, level: str, stage: str, message: str) -> None:
-        return None
-
-
-NULL_RUN = NullRun()
+NULL_RUN = Run("-", collect=False)
 
 _run: ContextVar[Run] = ContextVar("jobstitch_run", default=NULL_RUN)
 _stage: ContextVar[str] = ContextVar("jobstitch_stage", default="-")
-_attempt: ContextVar[int] = ContextVar("jobstitch_attempt", default=1)
 
 
 def current_run() -> Run:
@@ -95,10 +91,6 @@ def current_run() -> Run:
 
 def current_stage() -> str:
     return _stage.get()
-
-
-def current_attempt() -> int:
-    return _attempt.get()
 
 
 @contextmanager
@@ -113,14 +105,13 @@ def use_run(run: Run) -> Iterator[Run]:
 
 
 @contextmanager
-def stage(name: str, attempt: int = 1) -> Iterator[None]:
+def stage(name: str) -> Iterator[None]:
     """Label everything logged or called inside as belonging to ``name``."""
-    tokens = (_stage.set(name), _attempt.set(attempt))
+    token = _stage.set(name)
     try:
         yield
     finally:
-        _stage.reset(tokens[0])
-        _attempt.reset(tokens[1])
+        _stage.reset(token)
 
 
 class RunCollectingHandler(logging.Handler):
@@ -171,10 +162,8 @@ def configure_logging(level: Optional[str] = None) -> None:
 __all__ = [
     "LOGGER_ROOT",
     "Run",
-    "NULL_RUN",
     "configure_logging",
     "current_run",
-    "current_stage",
     "stage",
     "use_run",
 ]
