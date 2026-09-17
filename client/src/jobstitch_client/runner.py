@@ -1,6 +1,6 @@
 """One job, start to finish — the only place the order of steps is written.
 
-    detect -> analyze -> confirm -> write CV -> render -> letter -> deliver
+    detect -> analyze -> confirm -> write CV -> letter -> deliver
 
 Every collaborator is injected: the API, the folder layout, the question
 asked before spending anything, the spreadsheet. That is what lets the four
@@ -13,12 +13,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from jobstitch_contracts import CVDocument, JDAnalysis, static_jd_guess
+from jobstitch_contracts import JDAnalysis, static_jd_guess
 
 from .api import JobstitchApi, JobstitchError, read_bytes, read_text
 from .config import LETTER_PROMPT, Config
+from .cvjob import write_cv
 from .joblog import JobLog
 from .sources import JDCandidate
 from .tracking import Tracker
@@ -174,8 +175,7 @@ class JobRunner:
         """Everything that costs money, in order."""
         try:
             if self.config.cover_letter != "letter_only":
-                document = self._cv(job_dir, jd_text, log)
-                self._render(job_dir, document, log)
+                self._cv(job_dir, jd_text, log)
             if self.config.cover_letter in ("yes", "letter_only"):
                 self._letter(job_dir, jd_text, analysis, log)
         except JobstitchError as exc:
@@ -186,43 +186,39 @@ class JobRunner:
         self.tracker.record(delivered, analysis)
         return Outcome("delivered", "done", delivered)
 
-    def _cv(self, job_dir: Path, jd_text: str, log: JobLog) -> CVDocument:
-        """Write the CV — or reuse the one already in the folder.
+    def _cv(self, job_dir: Path, jd_text: str, log: JobLog) -> None:
+        """Write the CV and save all three files — or re-render the one here.
 
-        A folder that survived a failed render still holds its document, and
-        re-rendering it costs nothing. That is the whole recovery story: edit
-        the JSON, drop the folder back, pay for LaTeX only.
+        The server sends the document, the LaTeX and the PDF back together, so
+        there is one call and one moment where the folder is complete.
+
+        A folder that already holds its document is re-rendered instead, and
+        that costs LaTeX only. That is the whole recovery story: edit the
+        JSON, drop the folder back, pay nothing to a model.
         """
         artifacts = self._artifacts()
         stored = job_dir / artifacts.document
         if stored.is_file():
             log.step(f"♻ reusing {stored.name} (no model call)")
-            return CVDocument.model_validate_json(stored.read_text(encoding="utf-8"))
-
-        log.step("✍ writing the CV (this takes minutes)...")
-        document = self._call(log, lambda: self.api.create_cv(
-            jd_text,
-            profile=self.config.require("candidate_profile.json").read_bytes(),
-            candidate_data=self.config.require("candidate_data.json").read_bytes(),
-            prompts=self.config.prompt_overrides(),
-            template=read_text(self.config.path("resume3.tex.jinja")),
-            signature=read_bytes(self.config.path("candidate_signature.png")),
-            temperature=self.config.temperature,
-        ))
-        stored.write_text(document.model_dump_json(indent=2), encoding="utf-8")
-        return document
-
-    def _render(self, job_dir: Path, document: CVDocument, log: JobLog) -> None:
-        log.step("🖨 rendering the PDF...")
-        rendered = self._call(log, lambda: self.api.render(
-            document=document,
-            template=read_text(self.config.path("resume3.tex.jinja")),
-            signature=read_bytes(self.config.path("candidate_signature.png")),
-        ))
-        artifacts = self._artifacts()
+            rendered = self._call(log, lambda: self.api.render(
+                document=json.loads(stored.read_text(encoding="utf-8")),
+                template=read_text(self.config.path("resume.tex.jinja")),
+                signature=read_bytes(self.config.path("candidate_signature.png")),
+            ))
+        else:
+            log.step("✍ writing the CV (this takes minutes)...")
+            request_id, rendered = write_cv(
+                self.api, self.config, jd_text, say=log.step
+            )
+            if self.config.debug:
+                self._fetch_logs(log, request_id)
+            stored.write_text(
+                json.dumps(rendered.document, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
         (job_dir / artifacts.tex).write_text(rendered.tex, encoding="utf-8")
         (job_dir / artifacts.pdf).write_bytes(rendered.pdf_bytes())
-        log.step(f"✅ {artifacts.pdf} ({rendered.pages} page(s))")
+        log.step(f"✅ {artifacts.pdf}")
 
     def _letter(
         self, job_dir: Path, jd_text: str, analysis: JDAnalysis, log: JobLog
@@ -252,7 +248,7 @@ class JobRunner:
         job_dir: Optional[Path] = None,
         candidate: Optional[JDCandidate] = None,
     ) -> Outcome:
-        log.step(f"✗ {exc.kind}: {exc}")
+        log.step(f"✗ {exc}")
         # A failure is always worth the extra round trip: this is the one
         # moment the server's account of the run is what you need.
         self._fetch_logs(log, exc.request_id)
@@ -274,10 +270,15 @@ class JobRunner:
         return moved
 
     # --- helpers ------------------------------------------------------------
+    def _candidate_data(self) -> Dict[str, Any]:
+        """Your own candidate_data.json — read here only to name the files."""
+        return json.loads(
+            self.config.require("candidate_data.json").read_text(encoding="utf-8")
+        )
+
     def _artifacts(self) -> Artifacts:
         """File names come from your own candidate data, not from the server."""
-        data = json.loads(self.config.require("candidate_data.json").read_text(encoding="utf-8"))
-        return Artifacts(str(data.get("name") or "candidate"))
+        return Artifacts(str(self._candidate_data().get("name") or "candidate"))
 
     def _write_analysis(self, job_dir: Path, analysis: JDAnalysis) -> None:
         (job_dir / ANALYSIS_FILENAME).write_text(

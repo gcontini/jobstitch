@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-from .discovery import KNOWN_FILES, discover_files, find_config
+from .discovery import discover_files, find_config
 
 #: What --cover-letter accepts.
 COVER_LETTER_MODES = ("no", "yes", "letter_only")
@@ -28,7 +28,7 @@ CONFIG_KEYS = {
     "candidate_data": "candidate_data.json",
     "preferences": "pers_preferences.md",
     "signature": "candidate_signature.png",
-    "template": "resume3.tex.jinja",
+    "template": "resume.tex.jinja",
     "prompt_cv": "sys_prompt_cv.txt",
     "prompt_highlight": "sys_prompt_highlight.txt",
     "prompt_review": "sys_review_prompt.txt",
@@ -56,10 +56,11 @@ class Config:
     token: Optional[str] = None
     temperature: Optional[float] = None
     cover_letter: str = "no"
+    #: How long to wait for a CV job before giving up on it.
     timeout: float = 1800.0
     #: --debug: fetch the server's log for every call, not just failures.
     debug: bool = False
-    #: --verbose: print each call and its request id as it happens.
+    #: --verbose: print what the server reports about each finished step.
     verbose: bool = False
     #: Known file name -> where it was found. Missing means "server default".
     files: Mapping[str, Path] = field(default_factory=dict)
@@ -87,16 +88,6 @@ class Config:
             for name, part in PROMPT_FILES.items()
             if name in self.files
         }
-
-    def summary(self) -> str:
-        """One line per resolved input — 'which prompt did it use' in writing."""
-        lines = [f"server   : {self.server_url}"]
-        if self.config_path:
-            lines.append(f"config   : {self.config_path}")
-        for name in KNOWN_FILES:
-            where = self.files.get(name)
-            lines.append(f"{name:<25}: {where or 'server default'}")
-        return "\n".join(lines)
 
 
 def load_config(

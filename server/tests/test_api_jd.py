@@ -76,7 +76,7 @@ def test_analysis_requires_the_profile(client, candidate):
         files={"pers_preferences": ("prefs.md", candidate.preferences, "text/markdown")},
     )
     assert response.status_code == 400
-    assert "candidate_profile" in response.json()["error"]["message"]
+    assert "candidate_profile" in response.json()["error"]
 
 
 def test_analysis_requires_the_preferences(client, candidate):
@@ -85,7 +85,7 @@ def test_analysis_requires_the_preferences(client, candidate):
         files={"candidate_profile": ("p.json", json.dumps(dict(candidate.profile)))},
     )
     assert response.status_code == 400
-    assert "pers_preferences" in response.json()["error"]["message"]
+    assert "pers_preferences" in response.json()["error"]
 
 
 def test_a_bad_analysis_is_retried_then_reported(client, fake_models, candidate):
@@ -94,5 +94,5 @@ def test_a_bad_analysis_is_retried_then_reported(client, fake_models, candidate)
                            files=jd_parts(candidate))
     body = response.json()
     assert response.status_code == 502
-    assert body["error"]["stage"] == "jd.analysis"
+    assert "jd.analysis" in body["error"]
     assert len(fake_models["summary"].calls) == 2, "it retried once before giving up"

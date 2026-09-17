@@ -51,4 +51,4 @@ def test_a_letter_that_never_validates_is_a_502(client, fake_models, candidate):
     fake_models["summary"].replies = ["too short"]
     response = client.post("/v1/letter", data={"jd_text": "a jd"}, files=letter_parts(candidate))
     assert response.status_code == 502
-    assert response.json()["error"]["stage"] == "letter.generate"
+    assert "letter.generate" in response.json()["error"]

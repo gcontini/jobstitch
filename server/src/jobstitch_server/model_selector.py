@@ -293,6 +293,27 @@ def load_model_config(resources_dir: Optional[Path] = None) -> ModelConfig:
     return ModelConfig(models=models, defaults=raw.get("defaults") or {})
 
 
+def describe_response_format(
+    response_format: Optional[Dict[str, Any]],
+) -> str:
+    """One-token description of a ``response_format``, for the request log.
+
+    The schema body itself is far too long to log per call; what matters when
+    a reply comes back off-schema is which mode was actually asked for and
+    whether the endpoint was told to enforce it.
+    """
+    if response_format is None:
+        return "response_format=omitted"
+    kind = response_format.get("type")
+    if kind == "json_schema":
+        block = response_format.get("json_schema") or {}
+        return (
+            f"response_format=json_schema(name={block.get('name')}, "
+            f"strict={block.get('strict')})"
+        )
+    return f"response_format={kind}"
+
+
 class ModelSelector:
     """Bundle one LLM endpoint + model + generation parameters.
 
@@ -401,6 +422,16 @@ class ModelSelector:
             }
         return {"type": "json_object"}
 
+    def sends_schema(self) -> bool:
+        """True when :meth:`response_format` puts the schema in the request.
+
+        When it is ``False`` the endpoint is limited to ``{"type":
+        "json_object"}`` (or takes no ``response_format`` at all) and the
+        prompt is the only place it can learn the shape it must produce — so
+        callers restate the schema there, and only there.
+        """
+        return self.structured_output in ("json_schema", "json_schema_strict")
+
     def completions_create(
         self,
         messages: List[Dict[str, Any]],
@@ -411,8 +442,14 @@ class ModelSelector:
 
         Optional generation parameters left ``None`` at construction are
         omitted so the provider's defaults apply. ``response_format`` is
-        forwarded only when provided. Prints wall time and token usage after
-        each call.
+        forwarded only when provided.
+
+        Two lines are logged per call: what was sent (every parameter that
+        shapes the reply, so a request that came back truncated or off-schema
+        can be read back from the log without reproducing it) and what came
+        back (duration, token usage and ``finish_reason``). The prompt and the
+        reply themselves are logged at DEBUG only \u2014 they carry the candidate's
+        profile.
         """
         kwargs: Dict[str, Any] = {"model": self.model, "messages": messages}
         if response_format is not None:
@@ -430,28 +467,56 @@ class ModelSelector:
         if self.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.reasoning_effort
 
+        logger.info(
+            "  \u2192 [%s] %s | %s, max_tokens=%s, temperature=%s, "
+            "reasoning_effort=%s, extra_body=%s, input=%d msgs/%d chars",
+            self.profile,
+            self.model,
+            describe_response_format(response_format),
+            kwargs.get("max_tokens", "provider default"),
+            kwargs.get("temperature", "provider default"),
+            kwargs.get("reasoning_effort", "provider default"),
+            kwargs.get("extra_body", "-"),
+            len(messages),
+            sum(len(m.get("content") or "") for m in messages),
+        )
+        logger.debug("  \u2192 [%s] messages: %s", self.profile, messages)
+
         t0 = time.perf_counter()
         resp = self.llm.chat.completions.create(**kwargs)
         dt = time.perf_counter() - t0
 
         # One line per call, with what it cost. This is the whole of token
         # accounting: the log is the ledger, so there is no second copy to
-        # keep in step with it.
+        # keep in step with it. finish_reason rides along because "length"
+        # is the difference between a model that answered badly and one that
+        # was cut off mid-answer.
+        choice = resp.choices[0] if resp.choices else None
+        finish = getattr(choice, "finish_reason", None) if choice else None
+        content = getattr(choice.message, "content", None) if choice else None
         usage = getattr(resp, "usage", None)
         if usage is None:
-            logger.info("  \u23f1 [%s] %.1fs | usage not reported", self.profile, dt)
+            logger.info(
+                "  \u23f1 [%s] %s %.1fs | usage not reported, finish_reason=%s, "
+                "content=%d chars",
+                self.profile, self.model, dt, finish, len(content or ""),
+            )
         else:
             details = getattr(usage, "completion_tokens_details", None)
             thinking = getattr(details, "reasoning_tokens", None) if details else None
             logger.info(
-                "  \u23f1 [%s] %s %.1fs | prompt=%s, completion=%s%s",
+                "  \u23f1 [%s] %s %.1fs | prompt=%s, completion=%s, thinking=%s, "
+                "finish_reason=%s, content=%d chars",
                 self.profile,
                 self.model,
                 dt,
                 getattr(usage, "prompt_tokens", None),
                 getattr(usage, "completion_tokens", None),
-                f", thinking={thinking}" if thinking else "",
+                thinking,
+                finish,
+                len(content or ""),
             )
+        logger.debug("  \u21a9 [%s] content: %s", self.profile, content)
         return resp
 
     def __repr__(self) -> str:
@@ -621,6 +686,7 @@ __all__ = [
     "ModelSpec",
     "build_model",
     "build_models",
+    "describe_response_format",
     "load_model_config",
     "missing_keys_hint",
     "resolve_spec",

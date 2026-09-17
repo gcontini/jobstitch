@@ -49,7 +49,7 @@ timeout_seconds = 600
 # the JD analysis, and writes the cover letter. The only model allowed to run
 # web research (on the employer, for a direct posting from a named company).
 [models.summary]
-model             = "qwen-plus"
+model             = "qwen3.8-flash"
 api_key_env       = "DASHSCOPE_API_KEY"
 base_url_env      = "DASHSCOPE_BASE_URL"
 structured_output = "json_object"
@@ -62,11 +62,20 @@ web_search        = true
 # The large one: writes the tailored CV and reviews it. Thinking is worth
 # paying for here, capped so a long reasoning chain cannot eat the output
 # budget and truncate the JSON.
+#
+# The model name is load-bearing: `qwen-max` accepts `response_format`
+# json_schema and `enable_thinking` and then silently honours neither (probed
+# directly — it answers with the master profile's own shape, including
+# `bullet_points` as a bullet *count*, and reports no reasoning tokens).
+# `qwen3.8-max` enforces the schema. max_tokens is declared because reasoning
+# tokens come out of the completion budget, and the provider default leaves
+# too little behind for the JSON.
 [models.cv]
-model             = "qwen-max"
+model             = "qwen3.8-max"
 api_key_env       = "DASHSCOPE_API_KEY"
 base_url_env      = "DASHSCOPE_BASE_URL"
-structured_output = "json_object"
+structured_output = "json_schema_strict"
+max_tokens        = 16000
 thinking          = "on"
 thinking_budget   = 6000
 
@@ -74,7 +83,7 @@ thinking_budget   = 6000
 # already-validated JSON. Letting a hybrid-reasoning model think about that
 # burns the whole output budget on reasoning tokens and returns truncated JSON.
 [models.highlight]
-model             = "qwen-plus"
+model             = "qwen3.8-flash"
 api_key_env       = "DASHSCOPE_API_KEY"
 base_url_env      = "DASHSCOPE_BASE_URL"
 structured_output = "json_object"

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from jobstitch_contracts import TailoredCVData
 from jobstitch_server.model_selector import ModelSelector
+from jobstitch_server.pipeline.cv_schema import TailoredCVData
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_CANDIDATE = REPO_ROOT / "examples" / "candidate"
@@ -60,18 +62,27 @@ class FakeSelector(ModelSelector):
     one repeats, so a retry loop can be handed one failure then a success.
     """
 
-    def __init__(self, *replies: str, profile: str = "fake", model: str = "fake-model"):
+    def __init__(
+        self,
+        *replies: str,
+        profile: str = "fake",
+        model: str = "fake-model",
+        structured_output: str = "json_object",
+    ):
         super().__init__(
             profile=profile, api_key="test-key", base_url="http://fake.invalid/v1",
-            model=model, structured_output="json_object",
+            model=model, structured_output=structured_output,
         )
         self.replies = list(replies) or ["{}"]
         self.calls: list[dict] = []
+        self.gate: threading.Event | None = None
         self.llm = SimpleNamespace(
             chat=SimpleNamespace(completions=SimpleNamespace(create=self._create))
         )
 
     def _create(self, **kwargs):
+        if self.gate is not None:
+            assert self.gate.wait(timeout=10), "the gate was never opened"
         # Snapshot the messages: the pipeline appends to the same list
         # across retries, so a reference would show only the final state.
         self.calls.append({**kwargs, "messages": [dict(m) for m in kwargs["messages"]]})
@@ -88,3 +99,27 @@ class FakeSelector(ModelSelector):
     @property
     def last_prompt(self) -> str:
         return "\n".join(m["content"] or "" for m in self.calls[-1]["messages"])
+
+
+def wait_for_job(client, request_id: str, *, timeout: float = 10.0):
+    """Poll a CV job until it settles. Returns the last response, 2xx or not.
+
+    A job may finish before the first poll — the fakes answer instantly — and
+    that is fine: the state is a file, and reading it consumes nothing.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        response = client.get(f"/v1/cv/{request_id}/status")
+        if response.status_code != 200:
+            return response
+        if response.json()["data"]["status"] == "END":
+            return response
+        assert time.monotonic() < deadline, f"job {request_id} never finished"
+        time.sleep(0.02)
+
+
+def start_cv(client, parts, **data):
+    """POST /v1/cv and return the job id."""
+    response = client.post("/v1/cv", data={"jd_text": "x" * 1200, **data}, files=parts)
+    assert response.status_code == 202, response.text
+    return response.json()["request_id"]

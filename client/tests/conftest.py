@@ -3,7 +3,7 @@
 The client is tested against :class:`FakeApi` — an in-memory
 :class:`~jobstitch_client.api.JobstitchApi` — so every test runs with no
 server, no network and no model. One test file goes the other way and drives
-the real server in-process; see ``test_client_server.py``.
+the real server in-process; see ``tests/test_integration.py``.
 """
 
 from __future__ import annotations
@@ -15,14 +15,13 @@ from pathlib import Path
 import pytest
 from jobstitch_contracts import (
     CoverLetter,
-    CVDocument,
+    CVStatus,
     Envelope,
     JDAnalysis,
     JDDetection,
     LogEntry,
     RenderedCV,
     RequestLog,
-    TailoredCVData,
 )
 
 from jobstitch_client.api import JobstitchError
@@ -50,21 +49,20 @@ def analysis(**overrides) -> JDAnalysis:
     return JDAnalysis(**data)
 
 
-def document() -> CVDocument:
-    return CVDocument(
-        cv=TailoredCVData(
-            company_name="Acme Corp", job_title="Head of IT", summary="A summary.",
-            skills=[f"skill {i}" for i in range(6)],
-            experiences=[
-                {"title": "Engineer", "company": "Initech", "location": "Rome, Italy",
-                 "dates": "2020 -- 2024", "project_name": None,
-                 "bullet_points": ["Did a thing."]}
-                for _ in range(3)
-            ],
-        ),
-        candidate=json.loads((EXAMPLE_CANDIDATE / "candidate_data.json").read_text()),
-        generated_at=datetime(2026, 1, 15),
-    )
+def document() -> dict:
+    """What a finished job hands back: one flat object the client stores
+    without reading a field of it."""
+    return {
+        **json.loads((EXAMPLE_CANDIDATE / "candidate_data.json").read_text()),
+        "company_name": "Acme Corp", "job_title": "Head of IT", "summary": "A summary.",
+        "skills": [f"skill {i}" for i in range(6)],
+        "experiences": [
+            {"title": "Engineer", "company": "Initech", "location": "Rome, Italy",
+             "dates": "2020 -- 2024", "project_name": None,
+             "bullet_points": ["Did a thing."]}
+            for _ in range(3)
+        ],
+    }
 
 
 def envelope(data, *, request_id: str = "test-request") -> Envelope:
@@ -77,11 +75,13 @@ class FakeApi:
     def __init__(self, **replies):
         self.is_jd = replies.get("is_jd", True)
         self.analysis = replies.get("analysis", analysis())
-        self.document = replies.get("document", document())
         self.rendered = replies.get(
-            "rendered", RenderedCV.from_bytes(tex=r"\documentclass{article}", pdf=b"%PDF-fake",
-                                              pages=2, advice="length OK")
+            "rendered",
+            RenderedCV.from_bytes(tex=r"\documentclass{article}", pdf=b"%PDF-fake",
+                                  document=document()),
         )
+        #: What each poll answers, in order; the last one repeats.
+        self.statuses = replies.get("statuses", [CVStatus(status="END", detail="done")])
         self.cover_letter = replies.get(
             "cover_letter", CoverLetter(text="Dear hiring manager.", words=3)
         )
@@ -95,12 +95,8 @@ class FakeApi:
     def _record(self, name):
         self.calls.append(name)
         if self.fail_on == name:
-            raise JobstitchError(f"{name} failed", status=502, kind="model_output",
-                                 stage=name, request_id="failed-request")
-
-    def health(self):
-        self._record("health")
-        return envelope(None)
+            raise JobstitchError(f"model_output [{name}]: {name} failed", status=502,
+                                 request_id="failed-request")
 
     def logs(self, request_id):
         self._record("logs")
@@ -123,10 +119,20 @@ class FakeApi:
         self.seen_template = template
         self.seen_signature = signature
         self.seen_temperature = temperature
-        return envelope(self.document)
+        self.seen_candidate_data = candidate_data
+        return Envelope(request_id="test-request", ok=True)
+
+    def cv_status(self, request_id):
+        self._record("cv_status")
+        return envelope(self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0])
+
+    def cv_result(self, request_id):
+        self._record("cv_result")
+        return envelope(self.rendered)
 
     def render(self, *, document=None, tex=None, template=None, signature=None):
         self._record("render")
+        self.seen_document = document
         return envelope(self.rendered)
 
     def letter(self, text, *, profile, analysis=None, prompt=None, temperature=None):
@@ -177,3 +183,9 @@ def runner(api, workspace, config):
         confirmer=ScriptedConfirmer(Decision(submit=True)),
         tracker=build_tracker(workspace.root, enabled=True),
     )
+
+
+@pytest.fixture(autouse=True)
+def no_polling_delay(monkeypatch):
+    """The fake answers instantly; waiting 4s between polls proves nothing."""
+    monkeypatch.setattr("jobstitch_client.cvjob.POLL_SECONDS", 0)

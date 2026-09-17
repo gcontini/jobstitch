@@ -2,18 +2,18 @@
 
 Responses say what happened, not how. The commentary — including the line
 each model call writes with its duration and token counts — is collected here
-per request and kept in :mod:`jobstitch_server.logstore` for
-``GET /logs/{request_id}`` to serve.
+per request and written to the request's directory by
+:mod:`jobstitch_server.jobstore`, for ``GET /logs/{request_id}`` to serve.
 
 One piece does the collecting: a :class:`logging.Handler` that copies every
 record emitted during a request into that request's :class:`Run`. Pipeline
 code keeps calling ``logger.info(...)`` and never imports this module.
 
-The active run is found through a :class:`~contextvars.ContextVar`, which is
-what makes it work under ``run_in_threadpool``: anyio copies the context into
-the worker thread, so a line emitted deep inside the CV loop still lands in
-the right request's log. Outside a request — a test, a REPL — the default is
-:data:`NULL_RUN`, which discards.
+The active run is found through a :class:`~contextvars.ContextVar`. A CV job
+runs in a thread of its own and re-establishes it with :func:`use_run`, so a
+line emitted deep inside the CV loop still lands in the right job's log.
+Outside a request — a test, a REPL — the default is :data:`NULL_RUN`, which
+discards.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -42,7 +41,6 @@ class Run:
 
     def __init__(self, request_id: str) -> None:
         self.request_id = request_id
-        self.started = time.monotonic()
         self._logs: List[LogEntry] = []
         self._dropped = 0
 
@@ -72,9 +70,6 @@ class Run:
                 )
             ]
         return list(self._logs)
-
-    def elapsed(self) -> float:
-        return time.monotonic() - self.started
 
 
 class NullRun(Run):

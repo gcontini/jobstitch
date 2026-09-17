@@ -16,7 +16,7 @@ cover_letter = "no"
 # temperature = 0.4
 
 # How long to wait for a CV, in seconds. Writing one takes minutes.
-# timeout = 1800
+# timeout = 1800    # seconds to keep polling a CV job before giving up
 
 # Where your files are. Omit any entry and jobstitch looks for the file by its
 # usual name next to the executable; omit it there too and the server's own
@@ -26,7 +26,7 @@ cover_letter = "no"
 # candidate_data   = "candidate_data.json"
 # preferences      = "pers_preferences.md"
 # signature        = "candidate_signature.png"
-# template         = "resume3.tex.jinja"
+# template         = "resume.tex.jinja"
 # prompt_cv        = "sys_prompt_cv.txt"
 # prompt_highlight = "sys_prompt_highlight.txt"
 # prompt_review    = "sys_review_prompt.txt"

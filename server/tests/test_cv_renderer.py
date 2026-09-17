@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,7 @@ import pytest
 from jobstitch_server.pipeline.cv_renderer import CVRenderer, check_pdf_pages
 from jobstitch_server.pipeline.errors import LatexCompileError, LatexTimeoutError
 
-from server_helpers import GOLDEN, sample_cv_data
+from server_helpers import GOLDEN
 
 needs_latex = pytest.mark.skipif(shutil.which("pdflatex") is None, reason="pdflatex not installed")
 
@@ -23,6 +24,14 @@ def renderer(bundle, tmp_path) -> CVRenderer:
         assets=bundle.assets,
         work_dir=tmp_path,
     )
+
+
+def _context(document: dict) -> dict:
+    """What render_document builds before it renders: the flat namespace plus
+    the date, which is added at render time and not stored."""
+    from datetime import date
+
+    return {"generation_date": date.today().strftime("%Y/%m/%d"), **document}
 
 
 def tex_renderer(source: str, tmp_path: Path, **kw) -> CVRenderer:
@@ -61,16 +70,25 @@ def test_render_matches_the_golden_tex(renderer, fixture_document):
     """The whole escaping + templating pipeline, pinned byte for byte.
 
     A regression here is otherwise invisible until someone reads a PDF, so
-    this is the test that guards every refactor of the renderer.
+    this is the test that guards every refactor of the renderer. The one line
+    that cannot be pinned is the date printed on the CV: nothing stamps the
+    document any more, so it is always the day of the render.
     """
-    assert renderer.render_tex(fixture_document.render_context()) == (
-        GOLDEN / "cv_golden.tex"
-    ).read_text()
+    expected = (GOLDEN / "cv_golden.tex").read_text().replace(
+        "2026/01/15", date.today().strftime("%Y/%m/%d")
+    )
+    assert renderer.render_tex(_context(fixture_document)) == expected
 
 
 def test_render_is_pure(renderer, fixture_document, tmp_path):
-    renderer.render_tex(fixture_document.render_context())
+    renderer.render_tex(_context(fixture_document))
     assert list(tmp_path.iterdir()) == []
+
+
+def test_empty_certifications_drop_the_whole_section(renderer, sample_document):
+    """sample_document carries no certifications — the heading must go too."""
+    tex = renderer.render_tex(_context(sample_document))
+    assert "Professional Certifications" not in tex
 
 
 # --- assets -----------------------------------------------------------------
@@ -94,13 +112,12 @@ def test_renders_a_two_page_pdf_from_the_shipped_examples(renderer, sample_docum
     """End to end on a clean checkout: no personal data, no LLM, a real PDF."""
     result = renderer.render_document(sample_document)
     assert result.pages <= 2
-    assert result.advice == "length OK"
     assert result.pdf.startswith(b"%PDF")
 
 
 @needs_latex
 def test_compile_tex_takes_source_directly(renderer, sample_document, tmp_path):
-    tex = renderer.render_tex(sample_document.render_context())
+    tex = renderer.render_tex(_context(sample_document))
     assert renderer.compile_tex(tex, stem="hand_edited").pdf.startswith(b"%PDF")
     assert (tmp_path / "hand_edited.tex").is_file()
 

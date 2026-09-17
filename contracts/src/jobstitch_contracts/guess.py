@@ -16,7 +16,7 @@ MIN_JD_CHARS = 1000
 MAX_JD_CHARS = 10000
 
 #: Above this share of control characters the payload is binary, not prose.
-_MAX_CONTROL_RATIO = 0.01
+_MAX_CONTROL_RATIO = 0.1
 
 
 def static_jd_guess(

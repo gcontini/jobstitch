@@ -42,7 +42,7 @@ RUN uv sync --frozen --no-dev --package jobstitch-server --no-editable
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim-bookworm
 
-# resume3.tex.jinja needs pdflatex with hyperref, graphicx, array, hhline,
+# resume.tex.jinja needs pdflatex with hyperref, graphicx, array, hhline,
 # amsmath and babel-english (all in texlive-latex-base) and Type 1 CM fonts
 # (cm-super — without them T1 encoding falls back to bitmap fonts and the PDF
 # looks scanned; cm-super-minimal is not enough, it leaves the design sizes

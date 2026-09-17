@@ -13,7 +13,7 @@ S = 512                      # design canvas
 SS = 4                       # supersample factor for the raster pass
 
 INK_TOP  = "#21498C"
-INK_BOT  = "#0F2756"         # resume3.tex.jinja \definecolor{darkblue}
+INK_BOT  = "#0F2756"         # resume.tex.jinja \definecolor{darkblue}
 PAPER    = "#F5F2EA"
 THREAD   = "#FF9A3C"
 HILITE   = "#FFC978"

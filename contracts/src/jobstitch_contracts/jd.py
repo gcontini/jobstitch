@@ -1,8 +1,8 @@
 """The job-description side of the wire format.
 
 :class:`JDAnalysis` is what ``POST /v1/jd/analysis`` returns and what clients
-store as ``analysis.json``. Like :class:`~jobstitch_contracts.cv.TailoredCVData`
-its field descriptions are part of the prompt.
+store as ``analysis.json``. Like every model-facing schema, its field
+descriptions are part of the prompt.
 """
 
 from __future__ import annotations

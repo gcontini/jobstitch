@@ -3,32 +3,31 @@
 Nothing here talks to a network, a filesystem or a model — it is the set of
 shapes both sides agree on, so neither has to import the other:
 
-- ``cv`` — :class:`TailoredCVData` (what the LLM writes) and
-  :class:`CVDocument` (that plus the candidate data, copied through).
+- ``payloads`` — :class:`CVStatus`, polled while a CV job runs, and
+  :class:`RenderedCV`, the finished document, LaTeX and PDF in one.
 - ``jd`` — :class:`JDAnalysis` (``analysis.json``) and :class:`JDDetection`.
 - ``envelope`` — :class:`Envelope`, the uniform response body, and
   :class:`RequestLog`, fetched separately by request id.
 - ``guess`` — :func:`static_jd_guess`, the free pre-check both sides run.
+
+The CV document itself has no schema here: it is whatever the model wrote
+merged with whatever your ``candidate_data.json`` holds, and only your LaTeX
+template has an opinion about it.
 """
 
-from .cv import CV_DOCUMENT_VERSION, CVDocument, TailoredCVData, WorkExperienceItem
-from .envelope import Envelope, ErrorInfo, LogEntry, RequestLog
+from .envelope import Envelope, LogEntry, RequestLog
 from .guess import MAX_JD_CHARS, MIN_JD_CHARS, static_jd_guess
 from .jd import JDAnalysis, JDDetection
-from .payloads import CoverLetter, RenderedCV, ServerStatus
+from .payloads import CoverLetter, CVStatus, RenderedCV, ServerStatus
 
 __all__ = [
-    "CV_DOCUMENT_VERSION",
-    "CVDocument",
-    "TailoredCVData",
-    "WorkExperienceItem",
     "JDAnalysis",
     "JDDetection",
+    "CVStatus",
     "RenderedCV",
     "CoverLetter",
     "ServerStatus",
     "Envelope",
-    "ErrorInfo",
     "LogEntry",
     "RequestLog",
     "static_jd_guess",

@@ -34,8 +34,7 @@ class Session:
     def build(cls, config: Config, out: Path, *, assume_yes: bool = False,
               track: bool = True) -> "Session":
         workspace = Workspace(out).ensure()
-        api = HttpApi(config.server_url, token=config.token, timeout=config.timeout,
-                      verbose=config.verbose)
+        api = HttpApi(config.server_url, token=config.token)
         confirmer: Confirmer = AutoConfirmer() if assume_yes else PromptConfirmer()
         runner = JobRunner(
             api=api,

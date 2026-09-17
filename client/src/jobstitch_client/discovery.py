@@ -20,7 +20,7 @@ KNOWN_FILES = (
     "candidate_data.json",
     "pers_preferences.md",
     "candidate_signature.png",
-    "resume3.tex.jinja",
+    "resume.tex.jinja",
     "sys_prompt_cv.txt",
     "sys_prompt_highlight.txt",
     "sys_review_prompt.txt",

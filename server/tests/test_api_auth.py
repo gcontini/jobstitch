@@ -25,7 +25,7 @@ def test_a_configured_token_is_required(secured_client):
     response = secured_client.post("/v1/jd/detect", data={"jd_text": "short"})
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
-    assert response.json()["error"]["type"] == "unauthorized"
+    assert "unauthorized" in response.json()["error"]
 
 
 def test_the_wrong_token_is_refused(secured_client):
@@ -75,5 +75,5 @@ def test_a_provider_failure_is_a_gateway_error_not_a_bug(client, fake_models, mo
 
     assert response.status_code == 502
     body = response.json()
-    assert body["error"]["type"] == "provider_unreachable"
+    assert "provider_unreachable" in body["error"]
     assert "provider.invalid" not in response.text

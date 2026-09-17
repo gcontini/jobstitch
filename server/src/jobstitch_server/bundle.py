@@ -5,10 +5,12 @@ signature image. The server ships a default one and a request may override any
 part of it.
 
 :class:`CandidateInputs` is personal — the profile the model reads, the
-candidate data the template prints, the preferences the JD analysis scores
-against. It only ever comes from the request body, is never cached and is
-never written to disk. That is the whole reason this file has two classes
-instead of one: the thing worth caching and the thing that must not be.
+preferences the JD analysis scores against, and the candidate data the
+template prints. It only ever comes from the request body, is never cached and
+is never written to disk. That is the whole reason this file has two classes
+instead of one: the thing worth caching and the thing that must not be. Only
+``profile`` and ``preferences`` are ever shown to a model; ``data`` goes to
+the renderer, which cannot count pages without it.
 """
 
 from __future__ import annotations
@@ -60,11 +62,10 @@ class CandidateInputs:
 
     #: Everything you have done: what the model tailors the CV from.
     profile: Mapping[str, Any]
-    #: What the template prints as-is. Not validated: it is your data going to
-    #: your template, so a field jobstitch has never heard of is fine.
-    data: Mapping[str, Any] = field(default_factory=dict)
     #: What you want from a job, scored by the JD analysis.
     preferences: str = ""
+    #: candidate_data.json — printed by the template, read by no model.
+    data: Mapping[str, Any] = field(default_factory=dict)
 
 
 @lru_cache(maxsize=1)

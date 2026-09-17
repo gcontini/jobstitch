@@ -21,10 +21,10 @@ your own and no LaTeX install.
    | File | What it is |
    |---|---|
    | `candidate_profile.json` | Everything you have ever done. The model tailors the CV from this — the more complete, the better. **Required.** |
-   | `candidate_data.json` | Name, email, phone, LinkedIn, languages, location, education. Printed on the CV as-is, never sent through a model. **Required.** |
+   | `candidate_data.json` | Name, email, phone, LinkedIn, languages, location, education. Merged into the CV here and printed as-is; **Required.** |
    | `pers_preferences.md` | What you want from a job, in prose. Scored against each posting. **Required** for analysis. |
    | `candidate_signature.png` | Your signature image. Optional — a blank one is used otherwise. |
-   | `resume3.tex.jinja` | Your own LaTeX template. Optional — the server's is used otherwise. |
+   | `resume.tex.jinja` | Your own LaTeX template. Optional — the server's is used otherwise. |
    | `sys_prompt_cv.txt`, `sys_prompt_highlight.txt`, `sys_review_prompt.txt`, `sys_prompt_letter.txt` | Your own prompts. Optional, same. |
 
    Start from the fictional set in [`examples/candidate/`](../examples/candidate)
@@ -109,6 +109,23 @@ The same pipeline for a single file, then it exits. No recovery prompt. The
 file you name is **copied**, not consumed — unlike `watch`, which empties the
 folder it is watching.
 
+### `submit-raw` — just the CV, right here
+
+```bash
+jobstitch submit-raw posting.txt
+jobstitch submit-raw posting.txt -o cv.pdf -o cv.json -o cv.tex
+```
+
+The CV and nothing else: no detection, no analysis, no question before
+spending, no cover letter, no spreadsheet, no folders. Files land in the
+directory you are standing in.
+
+`-o` is repeatable and the suffix is the whole instruction — `.pdf` writes the
+PDF, `.json` the document, `.tex` the LaTeX. A name you chose is overwritten
+without asking. With no `-o` you get one PDF named after the posting
+(`posting.txt` → `posting.pdf`), and a second run counts up to `posting_1.pdf`
+rather than replacing it.
+
 ### `render` — compile an edited CV
 
 ```bash
@@ -120,6 +137,9 @@ Give it the `.json` document to re-render from the content, or the `.tex` to
 compile a hand-edit. The PDF lands next to the input. Needs no profile and no
 posting — just the server.
 
+The `.json` is one flat object: what the model wrote with your own candidate
+data already merged in. Edit any of it and re-render; it costs no model call.
+
 ### `logs` — what the server did
 
 ```bash
@@ -129,13 +149,14 @@ jobstitch logs b510f8dff047
 Every failure names a request id. This prints that request's server-side log
 — each model call with its duration and token counts, and the error that
 ended it. The server keeps the last couple of hundred requests, so ask
-reasonably soon; an id that has aged out gives `404`.
+reasonably soon; an id that has been dropped gives `404`.
 
 ### Switches
 
 | Flag | Applies to | What it does |
 |---|---|---|
 | `--out DIR` | clipboard, watch, submit | The output folder. Required. |
+| `-o FILE` | submit-raw | Where to write one output: `.pdf`, `.json` or `.tex`. Repeatable. |
 | `--in DIR` | watch | The folder to watch. Required. |
 | `--cover-letter no\|yes\|letter_only` | clipboard, watch, submit | Also write a cover letter, or write *only* one. Default `no`. |
 | `--yes` | clipboard, watch, submit | Submit every valid posting without asking. Unattended runs spend tokens on their own. |
@@ -143,7 +164,7 @@ reasonably soon; an id that has aged out gives `404`.
 | `--server`, `--token`, `--temperature` | all | Override the config for one run. |
 | `--config FILE`, `--data-dir DIR` | all | Use a specific config, or look for your files somewhere else. |
 | `-d`, `--debug` | all | Fetch the server's log after **every** call and fold it into `log.log`. Without it only failures are fetched. |
-| `-v`, `--verbose` | all | Print each API call and the request id it came back with, as it happens. |
+| `-v`, `--verbose` | all | While a CV is being written, print what the server reports about each step it finishes — tokens, thinking tokens, elapsed, and the reviewer's or the page check's own words. |
 
 Both work on either side of the mode name: `jobstitch -v submit posting.txt
 --out ~/applications` and `jobstitch submit -v …` do the same thing.
@@ -211,10 +232,17 @@ finished, `jobstitch logs <request id>`.
 ## What leaves your machine
 
 Per request: the posting text, your `candidate_profile.json`, your
-`candidate_data.json` (for the CV), your `pers_preferences.md` (for the
-analysis), and your signature image if you have one. The server keeps none of
-it. Whether *the model provider* keeps it is between you and whoever runs the
-server — the same question as with any hosted model.
+`pers_preferences.md` (for the analysis), your `candidate_data.json` and your
+signature image if you have one. Whether *the model provider* keeps what it is
+shown is between you and whoever runs the server — the same question as with
+any hosted model.
+
+**No model is ever shown your `candidate_data.json`.** It is sent because the
+server compiles the CV to count its pages, and a page count taken with the
+contact block missing is not the page count of the CV you will send; it goes
+to the LaTeX template and nowhere else. The server holds a finished CV in a
+directory of its own until a couple of hundred newer requests have pushed it
+out.
 
 Nothing is sent for text that fails the local length and binary checks, so a
 copied password or a screenful of code never leaves the machine.

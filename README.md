@@ -80,13 +80,15 @@ and the output layout.
 | | |
 |---|---|
 | **[`client/`](client/README.md)** | The executable. Watches your clipboard or a folder, keeps your CV data local, files every result in a dated folder. No Python, no API key, no LaTeX. |
-| **[`server/`](server/README.md)** | The container. Holds the model API keys and the LaTeX toolchain; writes the CV, compiles the PDF, analyses postings. Stores nothing beyond a short-lived log per request. |
+| **[`server/`](server/README.md)** | The container. Holds the model API keys and the LaTeX toolchain; writes the CV, compiles the PDF, analyses postings. Keeps a directory per request — its log, and a CV job's state and result — and nothing else. |
 | [`contracts/`](contracts/src/jobstitch_contracts/) | The shapes both sides agree on — the one thing each side imports, so neither imports the other. |
 
-Every server call returns immediately with just a result and a request id;
-`GET /logs/{request_id}` fetches what that request did, including the token
-spend of every model call. The client folds that into `log.log` next to each
-CV.
+Writing a CV takes minutes, so `POST /v1/cv` answers at once with a job id;
+the client polls `/v1/cv/{id}/status` every four seconds, prints each new step
+as it happens, and collects the JSON, the LaTeX and the PDF in one call at the
+end. `GET /logs/{request_id}` fetches what any request did, including the
+token spend of every model call; the client folds that into `log.log` next to
+each CV.
 
 ## Development
 
@@ -102,10 +104,12 @@ the code follows are in [AGENTS.md](AGENTS.md).
 
 ## Known limitations
 
-- The certifications table in `resume3.tex.jinja` is hardcoded LaTeX rather
+- The certifications table in `resume.tex.jinja` is hardcoded LaTeX rather
   than templated from your data — edit that block to put your own in.
-- Writing a CV takes minutes and holds the HTTP connection open for all of
-  it. Anything proxying the server needs a request timeout to match.
+- A CV job cannot be cancelled: an abandoned one holds a slot until its own
+  budget runs out. See [PLANNED-FEATURES.md](PLANNED-FEATURES.md).
+- A job id only means something to the instance holding its directory, so run
+  one instance per `JOBSTITCH_WORK_DIR`.
 - One template, one page limit, one language. Bring your own `.tex.jinja` if
   you want a different shape.
 

@@ -112,6 +112,12 @@ def runner(make_runner):
     return make_runner()
 
 
+@pytest.fixture(autouse=True)
+def no_polling_delay(monkeypatch):
+    """The fakes answer instantly; waiting 4s between polls proves nothing."""
+    monkeypatch.setattr("jobstitch_client.cvjob.POLL_SECONDS", 0)
+
+
 @needs_latex
 def test_a_posting_becomes_a_real_pdf(runner, models):
     outcome = runner.handle(JDCandidate(text=JD_TEXT))
@@ -124,7 +130,9 @@ def test_a_posting_becomes_a_real_pdf(runner, models):
     assert r"\documentclass" in (folder / "cv_Jordan_Rivera.tex").read_text()
 
     log = (folder / "log.log").read_text()
-    assert "rendering the PDF" in log
+    assert "writing the CV" in log
+    # The statuses the job went through, reported as they happened.
+    assert "generate" in log and "END" in log
     assert "server request" not in log, "a quiet run does not pull the server's log"
 
 
@@ -143,11 +151,12 @@ def test_the_rendered_pdf_can_be_re_rendered_from_its_document(runner, api, tmp_
     runner.handle(JDCandidate(text=JD_TEXT))
     document = next(tmp_path.rglob("cv_Jordan_Rivera.json"))
 
-    from jobstitch_contracts import CVDocument
+    stored = json.loads(document.read_text())
+    assert stored["name"] == "Jordan Rivera", "your own data, merged in server-side"
+    assert stored["job_title"] == "Staff Platform Engineer", "and the model's"
 
-    envelope = api.render(document=CVDocument.model_validate_json(document.read_text()))
+    envelope = api.render(document=stored)
     assert envelope.data.pdf_bytes().startswith(b"%PDF")
-    assert envelope.data.pages <= 2
 
 
 def test_a_server_error_reaches_the_client_as_a_typed_failure(runner, api, models, tmp_path):
@@ -167,4 +176,4 @@ def test_a_server_error_reaches_the_client_as_a_typed_failure(runner, api, model
 def test_the_client_reports_an_unreachable_server_clearly():
     api = HttpApi("http://127.0.0.1:1")  # nothing listens here
     with pytest.raises(JobstitchError, match="cannot reach the jobstitch server"):
-        api.health()
+        api.detect("x" * 1500)

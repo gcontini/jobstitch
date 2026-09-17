@@ -5,14 +5,13 @@ below, which is why the modes can be tested without a server and why swapping
 transport would touch one file.
 
 Every call returns the server's :class:`Envelope` rather than just its
-payload, because the ``request_id`` in it is what :meth:`HttpApi.logs` needs
-to fetch what the server actually did — separately, and only when someone
-wants it.
+payload, because the ``request_id`` in it is what the caller needs next — to
+poll a CV job, and to fetch what the server actually did from ``/logs``.
 """
 
 from __future__ import annotations
 
-import os
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Protocol
@@ -20,21 +19,18 @@ from typing import Any, Dict, Mapping, Optional, Protocol
 import httpx
 from jobstitch_contracts import (
     CoverLetter,
-    CVDocument,
+    CVStatus,
     Envelope,
     JDAnalysis,
     JDDetection,
     RenderedCV,
     RequestLog,
-    ServerStatus,
 )
 
-#: A CV run is minutes of model calls; the default has to allow for that.
-DEFAULT_TIMEOUT = 1800.0
+#: No call blocks for long any more — a CV job is polled, not waited on — but
+#: a render still has to sit through pdflatex.
+REQUEST_TIMEOUT = 180.0
 CONNECT_TIMEOUT = 10.0
-
-#: Statuses where trying the same request later is reasonable.
-RETRYABLE = frozenset({429, 502, 503, 504})
 
 
 class JobstitchError(RuntimeError):
@@ -45,27 +41,16 @@ class JobstitchError(RuntimeError):
         message: str,
         *,
         status: int = 0,
-        kind: str = "transport",
-        stage: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> None:
         super().__init__(message)
         self.status = status
-        self.kind = kind
-        self.stage = stage
         #: The handle for ``/logs/{id}`` — what the server did before failing.
         self.request_id = request_id
-
-    @property
-    def retryable(self) -> bool:
-        """True when the job should go back to the queue rather than to error/."""
-        return self.status in RETRYABLE or self.status == 0
 
 
 class JobstitchApi(Protocol):
     """What the client needs a jobstitch server to do."""
-
-    def health(self) -> Envelope[ServerStatus]: ...
 
     def logs(self, request_id: str) -> Envelope[RequestLog]: ...
 
@@ -80,10 +65,14 @@ class JobstitchApi(Protocol):
         self, text: str, *, profile: bytes, candidate_data: bytes,
         prompts: Optional[Mapping[str, str]] = None, template: Optional[str] = None,
         signature: Optional[bytes] = None, temperature: Optional[float] = None,
-    ) -> Envelope[CVDocument]: ...
+    ) -> Envelope[None]: ...
+
+    def cv_status(self, request_id: str) -> Envelope[CVStatus]: ...
+
+    def cv_result(self, request_id: str) -> Envelope[RenderedCV]: ...
 
     def render(
-        self, *, document: Optional[CVDocument] = None, tex: Optional[str] = None,
+        self, *, document: Optional[Mapping[str, Any]] = None, tex: Optional[str] = None,
         template: Optional[str] = None, signature: Optional[bytes] = None,
     ) -> Envelope[RenderedCV]: ...
 
@@ -99,9 +88,6 @@ class HttpApi:
 
     base_url: str
     token: Optional[str] = None
-    timeout: float = DEFAULT_TIMEOUT
-    #: Print each call and its request id — the client's ``--verbose``.
-    verbose: bool = False
     #: Injection point for tests: a client that reaches the app in-process,
     #: so both halves are exercised together with no socket.
     client: Optional[httpx.Client] = None
@@ -116,23 +102,10 @@ class HttpApi:
         self._client = httpx.Client(
             base_url=self.base_url.rstrip("/"),
             headers=headers,
-            timeout=httpx.Timeout(self.timeout, connect=CONNECT_TIMEOUT),
+            timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=CONNECT_TIMEOUT),
         )
-
-    @classmethod
-    def from_env(cls, url: Optional[str] = None, token: Optional[str] = None) -> "HttpApi":
-        return cls(
-            base_url=url or os.getenv("JOBSTITCH_API_URL", "http://localhost:8080"),
-            token=token or os.getenv("JOBSTITCH_API_TOKEN") or None,
-        )
-
-    def close(self) -> None:
-        self._client.close()
 
     # --- the calls ----------------------------------------------------------
-    def health(self) -> Envelope[ServerStatus]:
-        return self._get("/healthz", ServerStatus)
-
     def logs(self, request_id: str) -> Envelope[RequestLog]:
         """What the server did during one request. 404s once it is too old."""
         return self._get(f"/logs/{request_id}", RequestLog)
@@ -151,6 +124,12 @@ class HttpApi:
 
     def create_cv(self, text, *, profile, candidate_data, prompts=None, template=None,
                   signature=None, temperature=None):
+        """Start a CV job. The envelope's ``request_id`` is the job's handle.
+
+        ``candidate_data`` goes with it because the server renders the CV to
+        count its pages, and an empty contact block is not the page count of
+        the CV you will send. No model is shown it.
+        """
         files: Dict[str, Any] = {
             "candidate_profile": ("candidate_profile.json", profile, "application/json"),
             "candidate_data": ("candidate_data.json", candidate_data, "application/json"),
@@ -158,21 +137,27 @@ class HttpApi:
         for name, content in (prompts or {}).items():
             files[name] = (f"{name}.txt", content, "text/plain")
         if template is not None:
-            files["template"] = ("resume3.tex.jinja", template, "text/plain")
+            files["template"] = ("resume.tex.jinja", template, "text/plain")
         if signature is not None:
             files["signature"] = ("candidate_signature.png", signature, "image/png")
-        return self._post("/v1/cv", CVDocument,
+        return self._post("/v1/cv", type(None),
                           data=_clean({"jd_text": text, "temperature": temperature}),
                           files=files)
+
+    def cv_status(self, request_id: str) -> Envelope[CVStatus]:
+        return self._get(f"/v1/cv/{request_id}/status", CVStatus)
+
+    def cv_result(self, request_id: str) -> Envelope[RenderedCV]:
+        return self._get(f"/v1/cv/{request_id}", RenderedCV)
 
     def render(self, *, document=None, tex=None, template=None, signature=None):
         files: Dict[str, Any] = {}
         if document is not None:
-            files["document"] = ("cv.json", document.model_dump_json(), "application/json")
+            files["document"] = ("cv.json", json.dumps(document), "application/json")
         if tex is not None:
             files["tex"] = ("cv.tex", tex, "text/plain")
         if template is not None:
-            files["template"] = ("resume3.tex.jinja", template, "text/plain")
+            files["template"] = ("resume.tex.jinja", template, "text/plain")
         if signature is not None:
             files["signature"] = ("candidate_signature.png", signature, "image/png")
         return self._post("/v1/cv/render", RenderedCV, files=files)
@@ -197,8 +182,6 @@ class HttpApi:
         return self._send("POST", path, payload, **kwargs)
 
     def _send(self, method: str, path: str, payload: type, **kwargs) -> Envelope:
-        if self.verbose:
-            print(f"→ {method} {self.base_url.rstrip('/')}{path}", flush=True)
         try:
             response = self._client.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
@@ -217,17 +200,12 @@ class HttpApi:
             ) from exc
 
         envelope = Envelope[payload].model_validate(body)
-        if self.verbose:
-            print(f"← {response.status_code} request {envelope.request_id}", flush=True)
         if response.is_success and envelope.ok:
             return envelope
 
-        error = envelope.error
         raise JobstitchError(
-            error.message if error else f"{path} failed with {response.status_code}",
+            envelope.error or f"{path} failed with {response.status_code}",
             status=response.status_code,
-            kind=error.type if error else "http_error",
-            stage=error.stage if error else None,
             request_id=envelope.request_id,
         )
 

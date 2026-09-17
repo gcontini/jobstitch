@@ -12,6 +12,7 @@ Follow these strict rules:
         - Rewrite the summary to align with the target JD, however keep it grounded in MASTER PROFILE: do not invent.
         - Use as examples the summaries in MASTER PROFILE. 
     * skills: Select EXACTLY 6 skills total from the MASTER PROFILE or those clearly evidenced in my experience that best align with the JD requirements.
+    * certifications: From MASTER PROFILE's certifications list, select AT MOST 5 -- the ones most relevant to the JD, breaking ties in favor of the most recent. Do not invent certifications not present in MASTER PROFILE. Preserve each selected certification's date and name exactly as given, ordered most relevant/recent first.
     * experiences: 
       - Select, adapt, or merge experiences under the same company.
       - Omit roles irrelevant to the target JD.

@@ -19,11 +19,11 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 from jinja2 import DictLoader, Environment, TemplateError
-from jobstitch_contracts import CVDocument
 from pypdf import PdfReader
 
 from ..observability import LOGGER_ROOT
@@ -32,7 +32,7 @@ from .errors import LatexCompileError, LatexTimeoutError
 logger = logging.getLogger(f"{LOGGER_ROOT}.render")
 
 #: Default template name; the source itself always comes from the caller.
-TEMPLATE_NAME = "resume3.tex.jinja"
+TEMPLATE_NAME = "resume.tex.jinja"
 
 #: The CV must fit this many pages; over it, the generator condenses and retries.
 PAGE_LIMIT = 2
@@ -181,9 +181,16 @@ class CVRenderer:
                 f"template error: {type(exc).__name__}: {exc}", stage="render"
             ) from exc
 
-    def render_document(self, doc: CVDocument, *, stem: str = "cv") -> RenderResult:
-        """Render a :class:`CVDocument` and compile it."""
-        return self.compile_tex(self.render_tex(doc.render_context()), stem=stem)
+    def render_document(
+        self, document: Mapping[str, Any], *, stem: str = "cv"
+    ) -> RenderResult:
+        """Render one flat namespace of CV data and compile it.
+
+        The date is added here rather than stored in the document, so a
+        re-render of yesterday's file is dated today.
+        """
+        context = {"generation_date": date.today().strftime("%Y/%m/%d"), **document}
+        return self.compile_tex(self.render_tex(context), stem=stem)
 
     def compile_tex(self, tex: str, *, stem: str = "cv") -> RenderResult:
         """Compile LaTeX source to a PDF and report its length."""

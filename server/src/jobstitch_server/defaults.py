@@ -24,7 +24,7 @@ PROMPT_FILES = (
     "sys_review_prompt.txt",
     "sys_prompt_letter.txt",
 )
-TEMPLATE_FILE = "resume3.tex.jinja"
+TEMPLATE_FILE = "resume.tex.jinja"
 MODELS_FILE = "models.toml"
 PLACEHOLDER_SIGNATURE = "placeholder_signature.png"
 

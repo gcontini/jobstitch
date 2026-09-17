@@ -53,7 +53,7 @@ because breaking it has a cost we have already paid once.
 - **The LaTeX subprocess is always sandboxed.** Shell escape off, reads and
   writes confined to the scratch directory, no stdin, a timeout. The template
   and the `.tex` can both come from a client: treat them as hostile input.
-- **Pure where it can be.** `render_tex`, `render_context`, `static_jd_guess`
+- **Pure where it can be.** `render_tex`, `render_document`, `static_jd_guess`
   take values and return values. They are the easiest things to test and the
   hardest things to break.
 

@@ -26,3 +26,9 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+*.aux
+*.log
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.out

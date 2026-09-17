@@ -2,13 +2,16 @@
 
 The only mode that needs neither your profile nor a job description: it is
 the one to reach for after hand-editing a ``cv_*.json`` or a ``cv_*.tex``.
+
+The ``.json`` is one flat object — whatever the model wrote with your own
+candidate data over the top — which is exactly what ``GET /v1/cv/{id}`` sent
+and what the job folder holds.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-
-from jobstitch_contracts import CVDocument
 
 from ..api import HttpApi, JobstitchError, read_bytes, read_text
 from ..config import Config
@@ -21,9 +24,8 @@ def run(config: Config, source: Path, *, output: Path | None = None) -> int:
     if not source.is_file():
         fail(f"no such file: {source}")
 
-    api = HttpApi(config.server_url, token=config.token, timeout=config.timeout,
-                  verbose=config.verbose)
-    template = read_text(config.path("resume3.tex.jinja"))
+    api = HttpApi(config.server_url, token=config.token)
+    template = read_text(config.path("resume.tex.jinja"))
     signature = read_bytes(config.path("candidate_signature.png"))
 
     try:
@@ -31,19 +33,21 @@ def run(config: Config, source: Path, *, output: Path | None = None) -> int:
             envelope = api.render(tex=source.read_text(encoding="utf-8"),
                                   signature=signature)
         elif source.suffix == ".json":
-            document = CVDocument.model_validate_json(source.read_text(encoding="utf-8"))
+            # Not validated here: the server is the one that has to be able to
+            # render it, and it says so with a stage and a cause.
+            document = json.loads(source.read_text(encoding="utf-8"))
             envelope = api.render(document=document, template=template, signature=signature)
         else:
             fail(f"render takes a .tex or a .json file, not {source.suffix or 'a directory'}")
     except JobstitchError as exc:
         fail(f"{exc}{_server_log(api, exc.request_id)}")
     except ValueError as exc:
-        fail(f"{source.name} is not a valid CV document: {exc}")
+        fail(f"{source.name} is not valid JSON: {exc}")
 
     rendered = envelope.data
     target = Path(output) if output else source.with_suffix(".pdf")
     target.write_bytes(rendered.pdf_bytes())
-    print(f"✅ {target} ({rendered.pages} page(s))", flush=True)
+    print(f"✅ {target}", flush=True)
     return 0
 
 

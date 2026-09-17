@@ -23,6 +23,9 @@ services:
       # can spend your tokens, which is only safe on a private network.
       JOBSTITCH_API_TOKEN: "${JOBSTITCH_API_TOKEN:-}"
       JOBSTITCH_MAX_CONCURRENT_JOBS: "${JOBSTITCH_MAX_CONCURRENT_JOBS:-10}"
+      # Scratch space, request logs and finished CV jobs. This is the
+      # tmpfs below, so a restart loses them; mount a volume here instead
+      # if you want a CV to outlive the container that wrote it.
       JOBSTITCH_WORK_DIR: /tmp/jobstitch
 
     ports:

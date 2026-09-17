@@ -20,11 +20,12 @@ global state); this file is the file map and the day-to-day commands.
 ## Components (file map)
 
 **`contracts/src/jobstitch_contracts/`** — the wire format, nothing else
-- `cv.py` — `TailoredCVData` (LLM output; every `Field(description=...)` is
-  restated in a prompt's JSON schema — editing one changes model behaviour),
-  `CVDocument` (`cv` + a raw `candidate: dict` that is never sent to a model,
-  copied through verbatim; `render_context()` flattens both for Jinja and
-  raises on a key collision between them).
+- `payloads.py` — `CVStatus` (`status`, `detail`: where a CV job is now and
+  one line about the step before, no history), `RenderedCV`
+  (`tex`, `pdf_base64`, `document`), `CoverLetter`, `ServerStatus`. The CV
+  document is a raw flat dict with no schema — what the model wrote with your
+  `candidate_data` merged over the top. The schema the CV model writes to is
+  *not* here — see `pipeline/cv_schema.py`.
 - `jd.py` — `JDAnalysis` (the analysis endpoint's output), `JDDetection`
   (`is_job_description: bool`, nothing else — the reason lives in the log,
   not the reply).
@@ -33,24 +34,32 @@ global state); this file is the file map and the day-to-day commands.
   No usage/token fields here: each model call logs its own spend as one line.
 - `guess.py` — `static_jd_guess(text) -> bool`, the free structural check
   (length band, no binary) both sides can run before paying for anything.
-- `payloads.py` — `RenderedCV`, `CoverLetter`, `ServerStatus`.
 
-**`server/src/jobstitch_server/`** — stateless; personal data arrives per
-request and is dropped when it ends
-- `api/app.py` — `create_app()`, the ASGI middleware that propagates the
-  request id / log collector through `run_in_threadpool` via contextvars.
-- `api/deps.py` — `AppState`, `envelope_of()`, `execute()` (owns the
-  concurrency semaphore + threadpool hop + per-request scratch dir).
+**`server/src/jobstitch_server/`** — personal data arrives per request and is
+dropped when it ends; a request's own directory is the only thing kept
+- `api/app.py` — `create_app()`, the ASGI middleware that mints the request id
+  (filtered: it names a directory) and sets the log collector contextvar, and
+  the startup sweep that fails jobs a dead process left running.
+- `api/deps.py` — `AppState`, `envelope_for()`/`envelope_of()`, `claim_slot()`,
+  `execute()` (the blocking endpoints: semaphore + threadpool hop + scratch
+  dir + the log on disk afterwards).
+- `api/jobs.py` — the CV worker thread: re-establishes the `Run`, reports each
+  step by rewriting `status.json`, stores the result or the failure.
+- `jobstore.py` — one directory per request under `JOBSTITCH_WORK_DIR`
+  (`status.json`, `result.json`, `log.json`, `work/`), atomic writes, pruned
+  to the newest 200.
 - `api/routers/{health,jd,cv,letter,logs}.py` — one router per resource.
-  `logs.py` is `GET /logs/{request_id}` against `logstore.py`'s bounded
-  in-memory ring (`JOBSTITCH_LOG_HISTORY`, default 200) — the one piece of
+  `logs.py` is `GET /logs/{request_id}` against `jobstore.py`'s directory
+  per request under `JOBSTITCH_WORK_DIR` (newest 200 kept) — the one piece of
   state the server holds, and it is disposable.
 - `api/errors.py` — maps `PipelineError`/`ValidationError`/`openai.APIError`
   to a status and an `ok:false` envelope; never echoes the provider body.
 - `pipeline/cv_generator.py` — `CVGenerator`: write → review → render →
-  condense-to-two-pages (up to `max_attempts` rounds) → keyword highlight.
-  Pure library code — inputs in memory, outputs returned, nothing read from a
-  configured path.
+  condense-to-two-pages (up to `max_attempts` rounds) → keyword highlight →
+  render for good. Returns `(document, tex, pdf, summary)`. Pure library code
+  — inputs in memory, outputs returned, nothing read from a configured path;
+  progress leaves through an injected `progress(status, detail)` callback, not
+  a file.
 - `pipeline/cv_renderer.py` — `CVRenderer`: Jinja (`\VAR{}`/`\BLOCK{}`
   delimiters, `DictLoader` built fresh per request since the template can be
   client-supplied) → `pdflatex`, sandboxed (`-no-shell-escape`,
@@ -58,6 +67,12 @@ request and is dropped when it ends
   `mkdtemp` removed in a `finally`) → page count.
 - `pipeline/jd_validator.py`, `pipeline/letter_generator.py` — the other two
   LLM pipelines; same shape as `cv_generator.py`.
+- `pipeline/cv_schema.py` — `TailoredCVData`, the CV model's output schema and
+  the response model of `POST /v1/cv`. Every `Field(description=...)` is
+  restated in a prompt — editing one changes model behaviour. `extra="allow"`,
+  so an undeclared field survives validation and reaches the template;
+  `prompt_schema()` is the closed variant that goes into the request, because
+  strict `json_schema` endpoints refuse `additionalProperties: true`.
 - `model_selector.py` — `ModelSelector`, one OpenAI-compatible endpoint per
   role (`summary`/`cv`/`highlight`) from `resources/models.toml`. Every LLM
   call ends with one `logger.info` line carrying model, duration and token
@@ -65,13 +80,14 @@ request and is dropped when it ends
   total anywhere.
 - `bundle.py` — `ResourceBundle` (impersonal: prompts, template, signature —
   built once at startup, `with_overrides()` per request) vs.
-  `CandidateInputs` (personal: profile, candidate data, preferences — always
-  per-request, never cached, never written to disk).
+  `CandidateInputs` (personal: profile and preferences — always per-request,
+  never cached, never written to disk). No candidate data: no endpoint takes
+  it, because no model reads it.
 - `observability.py` — `Run`/`NullRun`, `current_run` contextvar, `stage()`
   context manager, the logging handler that turns log records into
   `LogEntry`s for the run.
 - `resources/` — the impersonal defaults baked into the image: four prompts,
-  `resume3.tex.jinja`, `models.toml`, a placeholder signature PNG.
+  `resume.tex.jinja`, `models.toml`, a placeholder signature PNG.
 
 **`client/src/jobstitch_client/`** — your data, a bearer token, no Python
 required to run it (PyInstaller `--onefile`)
@@ -113,19 +129,29 @@ required to run it (PyInstaller `--onefile`)
 ## Key contracts & invariants
 
 - **Every response is the same envelope**, success or failure:
-  `{request_id, ok, data, error}`. Nothing else rides on it — no logs, no
-  usage — so the common case pays nothing for what it does not ask for.
+  `{request_id, ok, data, error}`, where `error` is one string. Nothing else
+  rides on it — no logs, no usage — so the common case pays nothing for what
+  it does not ask for.
 - **`GET /logs/{request_id}`** is the only way to see what a request did.
-  Backed by a bounded in-memory ring (`logstore.py`); an id that aged out, or
-  landed on a different instance behind a load balancer, is a `404`. The
+  Backed by that request's directory under `JOBSTITCH_WORK_DIR`
+  (`jobstore.py`, newest 200 kept); an id that was pruned, that failed before
+  any work started, or that landed on a different instance, is a `404`. The
   client fetches it after every call with `--debug`, and always on failure.
 - **Token spend is per model call, not per request.** `model_selector.py`
   logs one line per call (model, duration, prompt/completion tokens); there
   is no aggregate anywhere in the envelope or the contracts.
-- **`candidate` on a `CVDocument` is a raw dict**, not a schema — whatever
-  your LaTeX template reads, put it in `candidate_data.json` and it flows
-  through untouched. The only rule is `render_context()` refusing a key that
-  both the model's output and your data define.
+- **The CV document is one flat dict with no schema** — whatever your LaTeX
+  template reads, put it in `candidate_data.json` and it flows through
+  untouched. It is `{**what the model wrote, **your candidate_data}`, so your
+  own data wins a collision and the model can never replace a real contact
+  detail. The client stores it and posts it back to `/v1/cv/render` without
+  parsing a field of it.
+- **`POST /v1/cv` is accept-then-poll and takes `candidate_data`.** It answers
+  `202` with a job id; `GET /v1/cv/{id}/status` gives `{status, detail}` (the
+  current step only, no history) and `GET /v1/cv/{id}` gives
+  `{document, tex, pdf_base64}` once it says `END`. The job runs in a detached
+  thread that reports by rewriting `status.json`. `candidate_data` is there
+  because the loop compiles the CV to count its pages — no model is shown it.
 - **The LaTeX subprocess is always sandboxed**: shell escape off
   (`-no-shell-escape`, `shell_escape=f`), reads/writes confined to the
   per-request scratch dir (`openin_any=p`/`openout_any=p`), no stdin, a

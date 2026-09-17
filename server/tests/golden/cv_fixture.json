@@ -54,6 +54,10 @@
         "project_name": null,
         "bullet_points": ["Automated provisioning for 300 servers."]
       }
+    ],
+    "certifications": [
+      {"date": "March 2025", "name": "AWS & Azure Certified Architect"},
+      {"date": "June 2019", "name": "DELE B2 (Spanish language proficiency)"}
     ]
   }
 }

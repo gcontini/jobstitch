@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from jobstitch_client.config import ConfigError, load_config
-from jobstitch_client.discovery import discover_files
 
 
 @pytest.fixture
@@ -26,7 +25,7 @@ def test_files_next_to_the_executable_are_found_by_name(home):
 
     assert config.path("candidate_profile.json") == home / "candidate_profile.json"
     assert config.path("sys_prompt_cv.txt") == home / "sys_prompt_cv.txt"
-    assert config.path("resume3.tex.jinja") is None, "absent means 'the server's default'"
+    assert config.path("resume.tex.jinja") is None, "absent means 'the server's default'"
 
 
 def test_the_config_file_is_read_from_the_same_place(home):
@@ -84,10 +83,3 @@ def test_a_bad_cover_letter_mode_is_refused(home):
 def test_a_required_file_that_is_missing_says_where_to_put_it(home):
     with pytest.raises(ConfigError, match="next to the jobstitch executable"):
         load_config().require("candidate_profile.json")
-
-
-def test_the_summary_says_where_every_input_came_from(home):
-    (home / "candidate_profile.json").write_text("{}")
-    summary = load_config().summary()
-    assert "candidate_profile.json" in summary
-    assert "server default" in summary, "the fallbacks are visible too"

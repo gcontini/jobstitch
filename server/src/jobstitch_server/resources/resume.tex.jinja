@@ -89,16 +89,15 @@
 \textcolor{darkblue}{\subsection{Languages}}
 {\VAR{ languages }}
 
+\BLOCK{ if certifications }
 \textcolor{darkblue}{\subsection{Professional Certifications}}
 
 \begin{tabular}{@{}l@{\hspace{0.5em}}c@{\hspace{0.6em}}l@{}}
-%# Not templated yet: edit these rows to your own certifications. They are
-%# also listed in candidate_profile.json, where the LLM reads them as context.
-March 2025 & : & Certified Kubernetes Administrator (CKA)\\
-September 2023 & : & AWS Solutions Architect -- Associate\\
-January 2022 & : & Google Cloud Professional Cloud Architect\\
-June 2019 & : & DELE B2 (Spanish language proficiency)\\
+\BLOCK{ for certification in certifications }
+\VAR{ certification.date } & : & \VAR{ certification.name }\\
+\BLOCK{ endfor }
 \end{tabular}
+\BLOCK{ endif }
 
 \textcolor{darkblue}{\subsection{Education:}}
 {\VAR{ education }}

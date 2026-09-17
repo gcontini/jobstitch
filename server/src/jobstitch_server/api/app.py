@@ -13,12 +13,12 @@ from contextlib import asynccontextmanager
 from typing import Optional
 from uuid import uuid4
 
-import anyio.to_thread
 from fastapi import Depends, FastAPI
 from openai import APIError
 from pydantic import ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from ..jobstore import SAFE_ID, STATUS
 from ..observability import LOGGER_ROOT, Run, configure_logging, use_run
 from ..pipeline.errors import PipelineError
 from .deps import AppState, require_token
@@ -38,6 +38,10 @@ class RequestContextMiddleware:
     contextvar that the endpoint — and the worker thread it hands the pipeline
     to — must see, and that only holds reliably when no task boundary sits in
     between.
+
+    An inbound ``X-Request-Id`` is honoured only if it looks like one. The id
+    names a directory under the work root, so anything else is a way to write
+    where the server was not asked to.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -50,8 +54,7 @@ class RequestContextMiddleware:
 
         headers = dict(scope.get("headers") or [])
         incoming = headers.get(b"x-request-id", b"").decode("latin-1").strip()
-        request_id = incoming[:64] or uuid4().hex[:12]
-        run = Run(request_id)
+        request_id = incoming if SAFE_ID.match(incoming) else uuid4().hex[:12]
 
         async def send_with_id(message: Message) -> None:
             if message["type"] == "http.response.start":
@@ -59,16 +62,8 @@ class RequestContextMiddleware:
                 message["headers"].append((b"x-request-id", request_id.encode("latin-1")))
             await send(message)
 
-        try:
-            with use_run(run):
-                await self.app(scope, receive, send_with_id)
-        finally:
-            # Whatever the request said about itself is kept for /logs, on the
-            # way out and however it ended.
-            state = getattr(scope.get("app", None), "state", None)
-            store = getattr(getattr(state, "jobstitch", None), "logs", None)
-            if store is not None:
-                store.put(request_id, run.logs())
+        with use_run(Run(request_id)):
+            await self.app(scope, receive, send_with_id)
 
 
 def create_app(
@@ -86,12 +81,7 @@ def create_app(
     async def lifespan(app: FastAPI):
         configure_logging()
         app.state.jobstitch = state or AppState.build(settings)
-        # The threadpool is where every pipeline job runs, so its size is the
-        # real concurrency limit; anyio's default of 40 is unrelated to what
-        # this server can afford.
-        anyio.to_thread.current_default_thread_limiter().total_tokens = max(
-            4, settings.max_concurrent_jobs
-        )
+        _fail_orphans(app.state.jobstitch)
         logger.info(
             "  \U0001f680 jobstitch-server ready (jobs<=%d, auth %s, pdflatex %s)",
             settings.max_concurrent_jobs,
@@ -122,6 +112,26 @@ def create_app(
     app.include_router(jd.router, prefix=API_PREFIX, tags=["jd"], dependencies=guarded)
     app.include_router(letter.router, prefix=API_PREFIX, tags=["letter"], dependencies=guarded)
     return app
+
+
+def _fail_orphans(state: AppState) -> None:
+    """Close jobs a previous process left running.
+
+    A fresh process owns no worker threads, so a directory that still says
+    ``running`` is provably orphaned — by a restart, a crash or a SIGKILL,
+    which a shutdown hook would not have caught. Run one instance per work
+    root: the semaphore and the workers are per-process, so a second one would
+    declare a live job dead.
+    """
+    for job in state.jobs.all():
+        record = job.read(STATUS) or {}
+        if record.get("state") != "running":
+            continue
+        job.write(STATUS, {**record, "state": "failed", "http_status": 503,
+                           "error": "unavailable: the server restarted while this "
+                                    "job was running"})
+        job.drop_work()
+        logger.warning("  ⚠ job %s was left running by a previous process", job.request_id)
 
 
 app = create_app()
