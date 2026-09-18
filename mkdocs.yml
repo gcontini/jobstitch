@@ -1,0 +1,52 @@
+# The doc/ folder, as a site.
+#
+#     uv run --group docs mkdocs serve     live preview on http://localhost:8000
+#     uv run --group docs mkdocs build     static HTML into site/
+#
+# Versions are pinned in pyproject.toml's `docs` group: MkDocs 1.x and Material
+# 9.x. Material is what renders the mermaid fences and the theming below; a
+# plain mkdocs theme would print the diagrams as code blocks.
+site_name: jobstitch
+site_description: Turn a job description into a tailored LaTeX CV, with any OpenAI-compatible model.
+repo_url: https://github.com/gcontini/jobstitch
+docs_dir: doc
+
+# A broken internal link fails the build rather than shipping.
+strict: true
+
+theme:
+  name: material
+  logo: icons/jobstitch-icon-128.png
+  favicon: icons/favicon.ico
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/weather-night, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/weather-sunny, name: Light mode}
+  features:
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - toc: {permalink: true}
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - jobstitch: index.md
+  - How it works:
+      - Architecture: architecture.md
+      - The CV pipeline: cv-pipeline.md
+      - A run, end to end: clipboard-flow.md
+  - Using it:
+      - The client: client.md
+      - Running the two halves apart: deployment.md
+  - Reference:
+      - The HTTP API: protocol.md
+      - Building the server: build-server.md
+      - Building the client: build-client.md
