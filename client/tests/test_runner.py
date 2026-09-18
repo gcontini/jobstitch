@@ -269,7 +269,7 @@ def test_your_own_prompts_and_template_are_sent(api, workspace, config, tmp_path
 
     assert api.seen_prompts == {"sys_prompt_cv": "MY PROMPT"}
     assert api.seen_template == "MY TEMPLATE"
-    assert api.seen_signature is not None
+    assert "candidate_signature.png" in api.seen_images
 
 
 # --- recovery ---------------------------------------------------------------

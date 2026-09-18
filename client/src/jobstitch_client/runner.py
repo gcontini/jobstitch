@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional
 
 from jobstitch_contracts import JDAnalysis, static_jd_guess
 
-from .api import JobstitchApi, JobstitchError, read_bytes, read_text
+from .api import JobstitchApi, JobstitchError, read_text
 from .config import LETTER_PROMPT, Config
 from .cvjob import write_cv
 from .joblog import JobLog
@@ -57,12 +57,18 @@ class JobRunner:
         config: Config,
         confirmer: Confirmer,
         tracker: Tracker,
+        resume: Optional[str] = None,
     ) -> None:
         self.api = api
         self.workspace = workspace
         self.config = config
         self.confirmer = confirmer
         self.tracker = tracker
+        #: --resume: pick an already-started CV job back up instead of
+        #: submitting a new one. Only meaningful for the one job this run
+        #: processes. Named apart from the resume() method below, which is
+        #: the unrelated "pick up a leftover working/ folder" recovery.
+        self.resume_id = resume
 
     # --- entry points -------------------------------------------------------
     def handle(self, candidate: JDCandidate) -> Outcome:
@@ -210,12 +216,12 @@ class JobRunner:
             rendered = self._call(log, lambda: self.api.render(
                 document=json.loads(stored.read_text(encoding="utf-8")),
                 template=read_text(self.config.path("resume.tex.jinja")),
-                signature=read_bytes(self.config.path("candidate_signature.png")),
+                images=self.config.image_parts(),
             ))
         else:
             log.step("✍ writing the CV (this takes minutes)...")
             request_id, rendered = write_cv(
-                self.api, self.config, jd_text, say=log.step
+                self.api, self.config, jd_text, say=log.step, resume=self.resume_id
             )
             if self.config.debug:
                 self._fetch_logs(log, request_id)
@@ -256,6 +262,8 @@ class JobRunner:
         candidate: Optional[JDCandidate] = None,
     ) -> Outcome:
         log.step(f"✗ {exc}")
+        if exc.request_id:
+            log.step(f"   request id: {exc.request_id}")
         # A failure is always worth the extra round trip: this is the one
         # moment the server's account of the run is what you need.
         self._fetch_logs(log, exc.request_id)

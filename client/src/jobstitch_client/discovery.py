@@ -4,6 +4,10 @@ The rule is: put your files in the current folder. Anything named below that
 sits in the directory you are running from (or in ``--data-dir``) is picked up
 by name. An explicit path in ``jobstitch.toml`` or on the command line always
 wins, and what cannot be found locally falls back to the server's default.
+
+Images are the one thing found by shape rather than by name: every ``.png``,
+``.jpg`` and ``.jpeg`` in those folders is sent along under its own file name,
+because that is the name the LaTeX template includes it under.
 """
 
 from __future__ import annotations
@@ -17,13 +21,15 @@ KNOWN_FILES = (
     "candidate_profile.json",
     "candidate_data.json",
     "candidate_preferences.md",
-    "candidate_signature.png",
     "resume.tex.jinja",
     "sys_prompt_cv.txt",
     "sys_prompt_highlight.txt",
     "sys_prompt_review.txt",
     "sys_prompt_letter.txt",
 )
+
+#: Images are picked up by extension, not by name.
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
 
 CONFIG_NAME = "jobstitch.toml"
 
@@ -71,4 +77,22 @@ def discover_files(extra: Optional[Path] = None) -> Dict[str, Path]:
     return found
 
 
-__all__ = ["KNOWN_FILES", "CONFIG_NAME", "search_dirs", "find_config", "discover_files"]
+def discover_images(extra: Optional[Path] = None) -> Dict[str, Path]:
+    r"""Every image in the search folders, by file name, first hit wins.
+
+    The name is the whole contract: the server writes each one next to the
+    ``.tex`` under exactly this name, so ``\includegraphics{photo.png}`` in
+    your template is satisfied by ``photo.png`` sitting next to you.
+    """
+    found: Dict[str, Path] = {}
+    for directory in search_dirs(extra):
+        for path in sorted(directory.iterdir()):
+            if path.suffix.lower() not in IMAGE_SUFFIXES or path.name in found:
+                continue
+            if path.is_file():
+                found[path.name] = path
+    return found
+
+
+__all__ = ["KNOWN_FILES", "IMAGE_SUFFIXES", "CONFIG_NAME", "search_dirs", "find_config",
+           "discover_files", "discover_images"]

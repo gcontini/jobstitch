@@ -1,8 +1,8 @@
 """The two halves of a request's inputs, kept apart on purpose.
 
 :class:`ResourceBundle` is impersonal — prompts, the LaTeX template, the
-signature image. The server ships a default one and a request may override any
-part of it.
+images the template includes. The server ships a default one and a request may
+override any part of it.
 
 :class:`CandidateInputs` is personal — the profile the model reads, the
 preferences the JD analysis scores against, and the candidate data the
@@ -18,17 +18,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from .defaults import (
-    PLACEHOLDER_SIGNATURE,
+    SIGNATURE_FILE,
     TEMPLATE_FILE,
     read_bytes_default,
     read_text_default,
 )
 
-#: The name the LaTeX template includes the signature under.
-SIGNATURE_ASSET = "candidate_signature.png"
+#: What counts as an image when a bundle is built from a folder.
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg")
 
 
 @dataclass(frozen=True)
@@ -47,12 +47,14 @@ class ResourceBundle:
         """A copy with the given parts replaced. ``None`` keeps the default.
 
         Handed the optional multipart parts directly, so a request that sends
-        nothing gets the shipped defaults untouched.
+        nothing gets the shipped defaults untouched. Images are merged over the
+        defaults by name rather than replacing them, so sending one image does
+        not take the others away.
         """
-        signature = parts.pop("signature", None)
+        images = parts.pop("images", None)
         changes = {k: v for k, v in parts.items() if v is not None}
-        if signature is not None:
-            changes["assets"] = {**self.assets, SIGNATURE_ASSET: signature}
+        if images:
+            changes["assets"] = {**self.assets, **images}
         return replace(self, **changes) if changes else self
 
 
@@ -82,7 +84,7 @@ def default_bundle() -> ResourceBundle:
         sys_prompt_review=read_text_default("sys_prompt_review.txt"),
         sys_prompt_letter=read_text_default("sys_prompt_letter.txt"),
         template_source=read_text_default(TEMPLATE_FILE),
-        assets={SIGNATURE_ASSET: read_bytes_default(PLACEHOLDER_SIGNATURE)},
+        assets={SIGNATURE_FILE: read_bytes_default(SIGNATURE_FILE)},
     )
 
 
@@ -94,12 +96,14 @@ def bundle_from_dir(directory: Path) -> ResourceBundle:
         path = directory / name
         return path.read_text(encoding="utf-8") if path.is_file() else read_text_default(name)
 
-    signature = directory / SIGNATURE_ASSET
-    assets = {
-        SIGNATURE_ASSET: signature.read_bytes()
-        if signature.is_file()
-        else read_bytes_default(PLACEHOLDER_SIGNATURE)
-    }
+    # The blank signature first, so a folder with no image of its own still
+    # renders the stock template; anything in the folder wins by name.
+    assets = {SIGNATURE_FILE: read_bytes_default(SIGNATURE_FILE)}
+    assets.update({
+        path.name: path.read_bytes()
+        for path in sorted(directory.iterdir())
+        if path.suffix.lower() in IMAGE_SUFFIXES and path.is_file()
+    })
     return ResourceBundle(
         sys_prompt_cv=text("sys_prompt_cv.txt"),
         sys_prompt_highlight=text("sys_prompt_highlight.txt"),
@@ -115,5 +119,5 @@ __all__ = [
     "CandidateInputs",
     "default_bundle",
     "bundle_from_dir",
-    "SIGNATURE_ASSET",
+    "IMAGE_SUFFIXES",
 ]

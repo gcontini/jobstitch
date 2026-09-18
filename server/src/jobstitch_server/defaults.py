@@ -6,7 +6,7 @@ rebuild), then the copy shipped inside the package. A file present in neither
 is a packaging bug, so it raises.
 
 Nothing personal is ever read from here — a profile, candidate data,
-preferences or a signature only ever arrive in a request.
+preferences or an image only ever arrive in a request.
 """
 
 from __future__ import annotations
@@ -28,7 +28,8 @@ PROMPT_FILES = (
 )
 TEMPLATE_FILE = "resume.tex.jinja"
 MODELS_FILE = "models.toml"
-PLACEHOLDER_SIGNATURE = "placeholder_signature.png"
+#: The blank signature shipped so the stock template compiles with no image.
+SIGNATURE_FILE = "candidate_signature.png"
 
 
 @lru_cache(maxsize=1)
@@ -73,7 +74,7 @@ __all__ = [
     "PROMPT_FILES",
     "TEMPLATE_FILE",
     "MODELS_FILE",
-    "PLACEHOLDER_SIGNATURE",
+    "SIGNATURE_FILE",
     "packaged_dir",
     "override_dir",
     "default_path",

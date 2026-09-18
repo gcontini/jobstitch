@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from jobstitch_contracts import CVStatus, Envelope, RenderedCV
@@ -32,7 +32,7 @@ from ...pipeline.cv_renderer import CVRenderer
 from .. import jobs
 from ..deps import claim_slot, envelope_for, envelope_of, execute, get_state, save_log
 from ..errors import BadPart, JobNotReady, MissingPart, UnknownRequest, failure_response
-from ..multipart import bytes_part, json_part, text_part
+from ..multipart import images_part, json_part, text_part
 
 router = APIRouter()
 
@@ -59,7 +59,9 @@ async def create_cv(
     template: Optional[UploadFile] = File(
         None, description="Override resume.tex.jinja (also used for the page check)"
     ),
-    signature: Optional[UploadFile] = File(None, description="candidate_signature.png"),
+    images: List[UploadFile] = File(
+        [], description="Images the template includes, each by its own file name"
+    ),
     temperature: Optional[float] = Form(None, description="Sampling temperature override"),
     pages: Optional[int] = Form(None, description="Page limit the CV must fit (default: 2)"),
 ) -> dict:
@@ -86,7 +88,7 @@ async def create_cv(
             sys_prompt_review, name="sys_prompt_review", max_bytes=limit
         ),
         template_source=await text_part(template, name="template", max_bytes=limit),
-        signature=await bytes_part(signature, name="signature", max_bytes=limit),
+        images=await images_part(images, max_bytes=limit),
     )
     candidate = CandidateInputs(profile=profile, data=data)
 
@@ -171,7 +173,9 @@ async def render_cv(
     document: Optional[UploadFile] = File(None, description="A CV document, as JSON"),
     tex: Optional[UploadFile] = File(None, description="Ready LaTeX source, compiled as-is"),
     template: Optional[UploadFile] = File(None, description="Override resume.tex.jinja"),
-    signature: Optional[UploadFile] = File(None, description="candidate_signature.png"),
+    images: List[UploadFile] = File(
+        [], description="Images the template includes, each by its own file name"
+    ),
 ) -> dict:
     """Compile a document (or a hand-edited ``.tex``) into a PDF."""
     state = get_state(request)
@@ -186,7 +190,7 @@ async def render_cv(
 
     bundle = state.bundle.with_overrides(
         template_source=await text_part(template, name="template", max_bytes=limit),
-        signature=await bytes_part(signature, name="signature", max_bytes=limit),
+        images=await images_part(images, max_bytes=limit),
     )
 
     def job(work: Path) -> RenderedCV:

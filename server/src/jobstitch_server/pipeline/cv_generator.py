@@ -410,7 +410,7 @@ class CVGenerator:
             stage="cv.generate",
         )
 
-    def _review_cv_data(self, cv_data: TailoredCVData) -> ReviewResult:
+    def _review_cv_data(self, cv_data: TailoredCVData, attempt:int) -> ReviewResult:
         """Review generated CV content against the master profile.
 
         Uses the same model as CV generation (``cv_model``) with the
@@ -421,10 +421,12 @@ class CVGenerator:
         attempts a warning is printed and an ``OK`` (no violations) result is
         returned so the unvalidated CV proceeds through the pipeline.
         """
-        review_request = (
-            "Review the GENERATED CV below against the candidate MASTER "
-            "PROFILE.\n"
-        )
+        
+        review_request = ("Review the GENERATED CV below against the candidate MASTER "
+            "PROFILE.\n") 
+        if attempt > 0:
+             review_request += ("The GENERATED CV has already been reviewed before."
+                                "Flag only Syntax and Logic issues.")
         review_request += (
             "--------------------------------------------\n"
             "MASTER PROFILE:\n"
@@ -433,8 +435,8 @@ class CVGenerator:
             "GENERATED CV:\n"
             f"{cv_data.model_dump_json(indent=2)}\n"
             "--------------------------------------------\n"
-            "Output a single JSON object with 'status' ('OK' or "
-            "'REVIEW') and 'violations' (list of specific issues to fix)."
+            "Output a single JSON object with 'status' 'OK' or "
+            "['REVIEW' and 'violations' (list of specific issues to fix)]."
         )
 
         messages = [
@@ -555,7 +557,7 @@ class CVGenerator:
                 logger.info("--- content review ---")
                 mark = self._mark()
                 with stage("cv.review"):
-                    review = self._review_cv_data(cv_data)
+                    review = self._review_cv_data(cv_data, attempt)
 
                 if review.status == "REVIEW":
                     # Print the violations the reviewer requested so they are

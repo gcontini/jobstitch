@@ -83,3 +83,24 @@ def test_a_bad_cover_letter_mode_is_refused(home):
 def test_a_required_file_that_is_missing_says_where_to_put_it(home):
     with pytest.raises(ConfigError, match="in the current folder"):
         load_config().require("candidate_profile.json")
+
+
+def test_every_image_in_the_folder_is_picked_up_by_its_own_name(home):
+    (home / "candidate_signature.png").write_bytes(b"sig")
+    (home / "photo.JPEG").write_bytes(b"me")
+    (home / "logo.jpg").write_bytes(b"logo")
+    (home / "JD.txt").write_text("not an image")
+
+    images = load_config().image_parts()
+
+    assert images == {"candidate_signature.png": b"sig", "photo.JPEG": b"me",
+                      "logo.jpg": b"logo"}
+
+
+def test_an_image_in_the_data_dir_beats_the_one_in_the_current_folder(home):
+    (home / "logo.png").write_bytes(b"from cwd")
+    elsewhere = home / "data"
+    elsewhere.mkdir()
+    (elsewhere / "logo.png").write_bytes(b"from data-dir")
+
+    assert load_config(data_dir=elsewhere).image_parts() == {"logo.png": b"from data-dir"}

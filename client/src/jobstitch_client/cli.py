@@ -22,10 +22,11 @@ from .ui import fail
 
 EPILOGUE = """\
 files:
-  Put candidate_profile.json, candidate_data.json, candidate_preferences.md and
-  candidate_signature.png in the current folder and they are picked up by
-  name. A prompt or resume.tex.jinja found there overrides the server's
-  default; anything absent falls back to it.
+  Put candidate_profile.json, candidate_data.json and candidate_preferences.md
+  in the current folder and they are picked up by name. A prompt or
+  resume.tex.jinja found there overrides the server's default; anything absent
+  falls back to it. Every .png, .jpg and .jpeg in the folder is sent too, under
+  its own file name — the name your template includes it under.
 
   --out defaults to the current folder, and watch's --in defaults to
   ./incoming (created if missing).
@@ -103,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
     submit = modes.add_parser("submit", help="Process one job description file.",
                               parents=[common])
     submit.add_argument("jd_file", type=Path, help="The job description to process.")
+    submit.add_argument("--resume", metavar="REQUEST_ID",
+                        help="Pick up a CV job already in progress instead of "
+                             "submitting a new one (starts from its /status).")
     add_job_flags(submit)
 
     raw = modes.add_parser(
@@ -115,6 +119,9 @@ def build_parser() -> argparse.ArgumentParser:
                      metavar="FILE",
                      help="Write one output here: .pdf, .json or .tex. Repeatable. "
                           "Without it, a PDF named after the job description.")
+    raw.add_argument("--resume", metavar="REQUEST_ID",
+                     help="Pick up a CV job already in progress instead of "
+                          "submitting a new one (starts from its /status).")
 
     render = modes.add_parser("render", help="Compile a cv_*.json or cv_*.tex into a PDF.",
                               parents=[common])
@@ -154,7 +161,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.mode == "render":
             return render_mode.run(config, args.source, output=args.output)
         if args.mode == "submit-raw":
-            return submit_raw_mode.run(config, args.jd_file, args.output)
+            return submit_raw_mode.run(config, args.jd_file, args.output, resume=args.resume)
 
         common = {"assume_yes": args.yes, "track": not args.no_xlsx}
         out = args.out or Path.cwd()
@@ -162,7 +169,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return clipboard_mode.run(config, out, **common)
         if args.mode == "watch":
             return watch_mode.run(config, args.inbox, out, **common)
-        return submit_mode.run(config, args.jd_file, out, **common)
+        return submit_mode.run(config, args.jd_file, out, resume=args.resume, **common)
     except ConfigError as exc:
         fail(str(exc))
     return 0

@@ -45,5 +45,5 @@ Follow these strict rules:
        h) Method-first: "Leveraging custom template metaprogramming, I built..."
 
 4. FORMATTING AND HIGHLIGHTING 
-   * Character Set: Use standard ASCII characters only. No special symbols, or non-ASCII characters.
+   * Character Set: Use standard ASCII characters only. No special symbols, unicode, or non-ASCII characters.
    * OUTPUT: json format according to the TailoredCVData schema passed.

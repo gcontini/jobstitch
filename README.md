@@ -14,7 +14,8 @@ Turn a job description and your unstructured experiences into a tailored, two-pa
 You need to provide:
 - A list of your work experiences, skills, the more you put the best it is (as long as you can defend it in an interview). You don't have to worry about writing them in a perfect style: it will fix it for you.
 - Some customization data for the cv (your phone...)
-   - Your signature scan (optional but beautiful)
+   - Any image your template uses — a signature scan, a photo, a logo. Drop it
+     in the folder and the template includes it by file name.
 - The job description
 - You api key and model configuration
 

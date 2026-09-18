@@ -78,8 +78,8 @@ dropped when it ends; a request's own directory is the only thing kept
   call ends with one `logger.info` line carrying model, duration and token
   counts — this is the entire token-accounting story; there is no per-request
   total anywhere.
-- `bundle.py` — `ResourceBundle` (impersonal: prompts, template, signature —
-  built once at startup, `with_overrides()` per request) vs.
+- `bundle.py` — `ResourceBundle` (impersonal: prompts, template, image assets
+  keyed by file name — built once at startup, `with_overrides()` per request) vs.
   `CandidateInputs` (personal: profile and preferences — always per-request,
   never cached, never written to disk). No candidate data: no endpoint takes
   it, because no model reads it.
@@ -88,7 +88,9 @@ dropped when it ends; a request's own directory is the only thing kept
   `LogEntry`s for the run.
 
 **`server/resources/`** — the impersonal defaults baked into the image: four
-prompts, `resume.tex.jinja`, `models.toml`, a placeholder signature PNG.
+prompts, `resume.tex.jinja`, `models.toml`, a blank `candidate_signature.png`
+(the one image the stock template includes; a request's own images are merged
+over the defaults by file name).
 Packaged as `jobstitch_server.resources` (see `server/pyproject.toml`) so
 `importlib.resources` still finds it despite living outside `src/`.
 
@@ -121,7 +123,7 @@ required to run it (PyInstaller `--onefile`)
   `--yes`), the analysis table, the recovery prompt.
 
 **Shared**
-- `examples/candidate/` — a fictional profile/data/preferences/signature set,
+- `examples/candidate/` — a fictional profile/data/preferences/image set,
   shipped so a fresh download has something to run against immediately.
 - `tests/test_architecture.py` — the one-way dependency rule, enforced.
 - `tests/test_integration.py` — client and server together in one process

@@ -7,7 +7,8 @@ file wins when both are sent.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import json
 
@@ -17,6 +18,10 @@ from .errors import BadPart, MissingPart, PartTooLarge
 
 #: Strip a UTF-8 BOM: Windows editors add one and JSON parsers choke on it.
 _BOM = "﻿"
+
+#: How many images one request may carry. A template that needs more than a
+#: handful is not what this is for, and each one costs a part-sized upload.
+MAX_IMAGES = 10
 
 
 async def bytes_part(
@@ -87,4 +92,28 @@ async def json_part(
     return data
 
 
-__all__ = ["bytes_part", "text_part", "json_part"]
+async def images_part(
+    uploads: Optional[List[UploadFile]], *, max_bytes: int
+) -> Dict[str, bytes]:
+    """The uploaded images, keyed by the name the template includes them under.
+
+    The part's file name *is* the key — that is the whole interface — so it is
+    reduced to a bare name here, before anything downstream sees a path.
+    """
+    uploads = uploads or []
+    # Counted before anything is read: refusing fifty parts after reading them
+    # is not a limit.
+    if len(uploads) > MAX_IMAGES:
+        raise BadPart(f"too many images: {len(uploads)} (limit {MAX_IMAGES})")
+    images: Dict[str, bytes] = {}
+    for upload in uploads:
+        name = Path(upload.filename or "").name
+        if not name or name.startswith("."):
+            raise BadPart(f"image part has no usable file name: {upload.filename!r}")
+        blob = await bytes_part(upload, name=f"images/{name}", max_bytes=max_bytes)
+        if blob:
+            images[name] = blob
+    return images
+
+
+__all__ = ["bytes_part", "text_part", "json_part", "images_part", "MAX_IMAGES"]

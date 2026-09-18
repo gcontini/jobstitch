@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from ..api import HttpApi, JobstitchApi
 from ..config import Config
@@ -32,7 +32,7 @@ class Session:
 
     @classmethod
     def build(cls, config: Config, out: Path, *, assume_yes: bool = False,
-              track: bool = True) -> "Session":
+              track: bool = True, resume: Optional[str] = None) -> "Session":
         workspace = Workspace(out).ensure()
         api = HttpApi(config.server_url, token=config.token, verbose=config.verbose)
         confirmer: Confirmer = AutoConfirmer() if assume_yes else PromptConfirmer()
@@ -42,6 +42,7 @@ class Session:
             config=config,
             confirmer=confirmer,
             tracker=build_tracker(workspace.root, track),
+            resume=resume,
         )
         return cls(config=config, workspace=workspace, api=api, runner=runner)
 

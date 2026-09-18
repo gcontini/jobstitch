@@ -7,7 +7,7 @@ what it cost.
 `jobstitch` is a single executable. It keeps your CV data on your machine and
 sends it, per request, to a [jobstitch server](../server/README.md) that holds
 the model API keys and the LaTeX toolchain. You need no Python, no API key of
-your own and no LaTeX install.
+your own and no LaTeX install (for the client).
 
 ---
 
@@ -23,9 +23,14 @@ your own and no LaTeX install.
    | `candidate_profile.json` | Everything you have ever done. The model tailors the CV from this — the more complete, the better. **Required.** |
    | `candidate_data.json` | Name, email, phone, LinkedIn, languages, location, education. Merged into the CV here and printed as-is; **Required.** |
    | `candidate_preferences.md` | What you want from a job, in prose. Scored against each posting. **Required** for analysis. |
-   | `candidate_signature.png` | Your signature image. Optional — a blank one is used otherwise. |
    | `resume.tex.jinja` | Your own LaTeX template. Optional — the server's is used otherwise. |
    | `sys_prompt_cv.txt`, `sys_prompt_highlight.txt`, `sys_prompt_review.txt`, `sys_prompt_letter.txt` | Your own prompts. Optional, same. |
+
+   Every `.png`, `.jpg` and `.jpeg` in the folder is sent along too, under its
+   own file name — that is the name your template includes it under, so
+   `\includegraphics{photo.jpg}` is satisfied by a `photo.jpg` sitting next to
+   you. `candidate_signature.png` is just one such image: the stock template
+   includes it, and a blank one is used if you have none.
 
    Start from the fictional set in [`examples/candidate/`](../examples/candidate)
    — copy them into your current folder and edit.
@@ -47,23 +52,13 @@ your own and no LaTeX install.
 4. **Check it works:**
 
    ```bash
-   jobstitch submit examples/posting.txt --out ~/applications
+   cd examples
+   jobstitch submit-raw posting.txt --server ... [--token ...]
    ```
 
 Everything resolves in this order: **command line → environment →
 `jobstitch.toml` → file in the current folder → the server's default.** The
 `[files]` section of `jobstitch.toml` can point anywhere:
-
-```toml
-[files]
-profile      = "~/cv/candidate_profile.json"
-candidate_data = "~/cv/candidate_data.json"
-preferences  = "~/cv/candidate_preferences.md"
-signature    = "~/cv/signature.png"
-template     = "~/cv/my_resume.tex.jinja"
-prompt_cv    = "~/cv/prompts/cv.txt"
-# also: prompt_highlight, prompt_review, prompt_letter
-```
 
 ---
 
@@ -233,8 +228,8 @@ finished, `jobstitch logs <request id>`.
 ## What leaves your machine
 
 Per request: the posting text, your `candidate_profile.json`, your
-`candidate_preferences.md` (for the analysis), your `candidate_data.json` and your
-signature image if you have one. Whether *the model provider* keeps what it is
+`candidate_preferences.md` (for the analysis), your `candidate_data.json` and
+every image in the folder. Whether *the model provider* keeps what it is
 shown is between you and whoever runs the server — the same question as with
 any hosted model.
 

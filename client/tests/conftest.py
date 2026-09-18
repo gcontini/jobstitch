@@ -113,11 +113,11 @@ class FakeApi:
         return envelope(self.analysis)
 
     def create_cv(self, text, *, profile, candidate_data, prompts=None, template=None,
-                  signature=None, temperature=None, pages=None):
+                  images=None, temperature=None, pages=None):
         self._record("create_cv")
         self.seen_prompts = dict(prompts or {})
         self.seen_template = template
-        self.seen_signature = signature
+        self.seen_images = dict(images or {})
         self.seen_temperature = temperature
         self.seen_candidate_data = candidate_data
         self.seen_pages = pages
@@ -131,9 +131,10 @@ class FakeApi:
         self._record("cv_result")
         return envelope(self.rendered)
 
-    def render(self, *, document=None, tex=None, template=None, signature=None):
+    def render(self, *, document=None, tex=None, template=None, images=None):
         self._record("render")
         self.seen_document = document
+        self.seen_images = dict(images or {})
         return envelope(self.rendered)
 
     def letter(self, text, *, profile, analysis=None, prompt=None, temperature=None):
@@ -160,7 +161,8 @@ def config() -> Config:
         server_url="http://test.invalid",
         files={name: EXAMPLE_CANDIDATE / name for name in (
             "candidate_profile.json", "candidate_data.json",
-            "candidate_preferences.md", "candidate_signature.png")},
+            "candidate_preferences.md")},
+        images={"candidate_signature.png": EXAMPLE_CANDIDATE / "candidate_signature.png"},
     )
 
 

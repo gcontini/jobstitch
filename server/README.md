@@ -4,7 +4,7 @@ The compute half of jobstitch: it turns a job description into tailored CV
 data, compiles LaTeX into a PDF, analyses postings and writes cover letters.
 
 It holds your provider API keys and a set of default prompts. Everything
-else — your profile, your contact details, your preferences, your signature —
+else — your profile, your contact details, your preferences, your images —
 arrives with each request and is thrown away when it ends. There is no
 database and no user accounts.
 
@@ -230,7 +230,7 @@ curl -s localhost:8080/v1/cv/$ID > cv.json # once it says END
 | `candidate_data` | required | Your name, email and the rest — what the template prints |
 | `sys_prompt_cv`, `sys_prompt_highlight`, `sys_prompt_review` | optional | Replace a prompt for this request |
 | `template` | optional | Replace `resume.tex.jinja` |
-| `signature` | optional | Your signature PNG |
+| `images` | optional | Repeatable. Each part's **file name** is the name the template includes it under. Up to 10. |
 | `temperature` | optional | Tuning |
 | `pages` | optional | Page limit the CV must fit. Default: 2. |
 
@@ -283,7 +283,7 @@ curl -F tex=@cv_edited.tex    localhost:8080/v1/cv/render
 
 Send a `document` — the flat object `GET /v1/cv/{id}` returned, or anything
 else your template can read — **or** a hand-edited `.tex`, not both. Optional
-`template` and `signature`. Returns `{tex, pdf_base64}`; `document` is not
+`template` and `images`. Returns `{tex, pdf_base64}`; `document` is not
 echoed back, because whoever asked for the render already has it. Cheap and
 deterministic: editing the content and re-rendering never costs a model call.
 

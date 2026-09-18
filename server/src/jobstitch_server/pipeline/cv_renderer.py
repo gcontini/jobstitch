@@ -59,9 +59,9 @@ class CVRenderer:
         The Jinja template text. Client-supplied when the request carries one,
         otherwise the server's default.
     assets:
-        Binary files the template includes by relative name (the signature
-        PNG). Written next to the ``.tex`` because ``\\includegraphics`` paths
-        are resolved relative to it.
+        Images the template includes by relative name — whatever the client
+        sent, under the file names it sent them with. Written next to the
+        ``.tex`` because ``\\includegraphics`` paths are resolved relative to it.
     work_dir:
         Scratch directory for this render. The caller creates and removes it.
     """

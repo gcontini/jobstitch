@@ -12,10 +12,11 @@ poll a CV job, and to fetch what the server actually did from ``/logs``.
 from __future__ import annotations
 
 import json
+import mimetypes
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Protocol
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Tuple
 
 import httpx
 from jobstitch_contracts import (
@@ -28,6 +29,9 @@ from jobstitch_contracts import (
     RequestLog,
     ServerStatus,
 )
+
+#: One multipart part: the field name, then the file name, bytes and type.
+Part = Tuple[str, Tuple[str, Any, str]]
 
 #: No call blocks for long any more — a CV job is polled, not waited on — but
 #: a render still has to sit through pdflatex.
@@ -70,7 +74,7 @@ class JobstitchApi(Protocol):
     def create_cv(
         self, text: str, *, profile: bytes, candidate_data: bytes,
         prompts: Optional[Mapping[str, str]] = None, template: Optional[str] = None,
-        signature: Optional[bytes] = None, temperature: Optional[float] = None,
+        images: Optional[Mapping[str, bytes]] = None, temperature: Optional[float] = None,
         pages: Optional[int] = None,
     ) -> Envelope[None]: ...
 
@@ -80,7 +84,7 @@ class JobstitchApi(Protocol):
 
     def render(
         self, *, document: Optional[Mapping[str, Any]] = None, tex: Optional[str] = None,
-        template: Optional[str] = None, signature: Optional[bytes] = None,
+        template: Optional[str] = None, images: Optional[Mapping[str, bytes]] = None,
     ) -> Envelope[RenderedCV]: ...
 
     def letter(
@@ -118,7 +122,7 @@ class HttpApi:
     # --- the calls ----------------------------------------------------------
     def logs(self, request_id: str) -> Envelope[RequestLog]:
         """What the server did during one request. 404s once it is too old."""
-        return self._get(f"/logs/{request_id}", RequestLog)
+        return self._get(f"/logs/{request_id}", RequestLog, request_id=request_id)
 
     def detect(self, text: str) -> Envelope[JDDetection]:
         self._ensure_healthy()
@@ -130,28 +134,27 @@ class HttpApi:
             "/v1/jd/analysis", JDAnalysis,
             data=_clean({"jd_text": text, "pers_preferences_text": preferences,
                          "temperature": temperature}),
-            files={"candidate_profile": ("candidate_profile.json", profile,
-                                         "application/json")},
+            files=[("candidate_profile", ("candidate_profile.json", profile,
+                                          "application/json"))],
         )
 
     def create_cv(self, text, *, profile, candidate_data, prompts=None, template=None,
-                  signature=None, temperature=None, pages=None):
+                  images=None, temperature=None, pages=None):
         """Start a CV job. The envelope's ``request_id`` is the job's handle.
 
         ``candidate_data`` goes with it because the server renders the CV to
         count its pages, and an empty contact block is not the page count of
         the CV you will send. No model is shown it.
         """
-        files: Dict[str, Any] = {
-            "candidate_profile": ("candidate_profile.json", profile, "application/json"),
-            "candidate_data": ("candidate_data.json", candidate_data, "application/json"),
-        }
+        files: List[Part] = [
+            ("candidate_profile", ("candidate_profile.json", profile, "application/json")),
+            ("candidate_data", ("candidate_data.json", candidate_data, "application/json")),
+        ]
         for name, content in (prompts or {}).items():
-            files[name] = (f"{name}.txt", content, "text/plain")
+            files.append((name, (f"{name}.txt", content, "text/plain")))
         if template is not None:
-            files["template"] = ("resume.tex.jinja", template, "text/plain")
-        if signature is not None:
-            files["signature"] = ("candidate_signature.png", signature, "image/png")
+            files.append(("template", ("resume.tex.jinja", template, "text/plain")))
+        files.extend(_image_parts(images))
         self._ensure_healthy()
         return self._post("/v1/cv", type(None),
                           data=_clean({"jd_text": text, "temperature": temperature,
@@ -159,31 +162,30 @@ class HttpApi:
                           files=files)
 
     def cv_status(self, request_id: str) -> Envelope[CVStatus]:
-        return self._get(f"/v1/cv/{request_id}/status", CVStatus)
+        return self._get(f"/v1/cv/{request_id}/status", CVStatus, request_id=request_id)
 
     def cv_result(self, request_id: str) -> Envelope[RenderedCV]:
-        return self._get(f"/v1/cv/{request_id}", RenderedCV)
+        return self._get(f"/v1/cv/{request_id}", RenderedCV, request_id=request_id)
 
-    def render(self, *, document=None, tex=None, template=None, signature=None):
-        files: Dict[str, Any] = {}
+    def render(self, *, document=None, tex=None, template=None, images=None):
+        files: List[Part] = []
         if document is not None:
-            files["document"] = ("cv.json", json.dumps(document), "application/json")
+            files.append(("document", ("cv.json", json.dumps(document), "application/json")))
         if tex is not None:
-            files["tex"] = ("cv.tex", tex, "text/plain")
+            files.append(("tex", ("cv.tex", tex, "text/plain")))
         if template is not None:
-            files["template"] = ("resume.tex.jinja", template, "text/plain")
-        if signature is not None:
-            files["signature"] = ("candidate_signature.png", signature, "image/png")
+            files.append(("template", ("resume.tex.jinja", template, "text/plain")))
+        files.extend(_image_parts(images))
         return self._post("/v1/cv/render", RenderedCV, files=files)
 
     def letter(self, text, *, profile, analysis=None, prompt=None, temperature=None):
-        files: Dict[str, Any] = {
-            "candidate_profile": ("candidate_profile.json", profile, "application/json")
-        }
+        files: List[Part] = [
+            ("candidate_profile", ("candidate_profile.json", profile, "application/json"))
+        ]
         if analysis is not None:
-            files["analysis"] = ("analysis.json", analysis, "application/json")
+            files.append(("analysis", ("analysis.json", analysis, "application/json")))
         if prompt is not None:
-            files["sys_prompt_letter"] = ("sys_prompt_letter.txt", prompt, "text/plain")
+            files.append(("sys_prompt_letter", ("sys_prompt_letter.txt", prompt, "text/plain")))
         return self._post("/v1/letter", CoverLetter,
                           data=_clean({"jd_text": text, "temperature": temperature}),
                           files=files)
@@ -216,18 +218,25 @@ class HttpApi:
             status=last_error.status if last_error else 0,
         )
 
-    def _get(self, path: str, payload: type) -> Envelope:
-        return self._send("GET", path, payload)
+    def _get(self, path: str, payload: type, *, request_id: Optional[str] = None) -> Envelope:
+        return self._send("GET", path, payload, request_id=request_id)
 
     def _post(self, path: str, payload: type, **kwargs) -> Envelope:
         return self._send("POST", path, payload, **kwargs)
 
-    def _send(self, method: str, path: str, payload: type, **kwargs) -> Envelope:
+    def _send(
+        self, method: str, path: str, payload: type,
+        *, request_id: Optional[str] = None, **kwargs,
+    ) -> Envelope:
         try:
             response = self._client.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
+            # A network error (e.g. a timeout) means no response came back to
+            # read a request_id from, so the id already known to the caller
+            # (a job being polled) is the only one there is to report.
             raise JobstitchError(
-                f"cannot reach the jobstitch server at {self.base_url}: {exc}"
+                f"cannot reach the jobstitch server at {self.base_url}: {exc}",
+                request_id=request_id,
             ) from exc
 
         try:
@@ -249,6 +258,19 @@ class HttpApi:
             status=response.status_code,
             request_id=envelope.request_id,
         )
+
+
+def _image_parts(images: Optional[Mapping[str, bytes]]) -> List[Part]:
+    """Every image as its own ``images`` part, named after the file it came from.
+
+    A list of parts and not a mapping because they all share one field name:
+    the server keys the assets off each part's file name, which is what the
+    template includes them under.
+    """
+    return [
+        ("images", (name, blob, mimetypes.guess_type(name)[0] or "application/octet-stream"))
+        for name, blob in (images or {}).items()
+    ]
 
 
 def _clean(values: Dict[str, Any]) -> Dict[str, Any]:

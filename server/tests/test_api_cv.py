@@ -13,12 +13,15 @@ from __future__ import annotations
 import json
 import shutil
 import threading
+from pathlib import Path
 
 import pytest
 
 from jobstitch_contracts import RenderedCV
 
-from server_helpers import sample_cv_data, start_cv, wait_for_job
+from jobstitch_server.api.multipart import MAX_IMAGES
+
+from server_helpers import EXAMPLE_CANDIDATE, sample_cv_data, start_cv, wait_for_job
 
 needs_latex = pytest.mark.skipif(shutil.which("pdflatex") is None, reason="pdflatex not installed")
 OK_REVIEW = '{"status": "OK", "violations": []}'
@@ -393,3 +396,52 @@ def test_a_broken_template_is_422_with_a_scrubbed_log(client, sample_document, t
     entries = client.get(f"/logs/{body['request_id']}").json()["data"]["entries"]
     assert any("Undefined control sequence" in e["message"] for e in entries)
     assert str(tmp_path) not in json.dumps(entries)
+
+
+# --- images ------------------------------------------------------------------
+IMAGE_TEMPLATE = r"""\documentclass{article}
+\usepackage[pdftex]{graphicx}
+\begin{document}\VAR{job_title}
+\includegraphics[width=2cm]{logo.png}
+\includegraphics[width=2cm]{candidate_signature.png}
+\end{document}"""
+
+
+@needs_latex
+def test_an_uploaded_image_is_there_under_its_own_name(client, sample_document):
+    """The file name is the interface: the template includes what you sent,
+    under the name you sent it with."""
+    logo = (EXAMPLE_CANDIDATE / "candidate_signature.png").read_bytes()
+    files = [
+        ("document", ("cv.json", json.dumps(sample_document), "application/json")),
+        ("template", ("t.tex.jinja", IMAGE_TEMPLATE, "text/plain")),
+        ("images", ("logo.png", logo, "image/png")),
+    ]
+    body = client.post("/v1/cv/render", files=files).json()
+
+    # candidate_signature.png is not sent and still resolves: the shipped
+    # blank one is a default, not a special case.
+    assert body["ok"] is True, body.get("error")
+    assert RenderedCV.model_validate(body["data"]).pdf_bytes().startswith(b"%PDF")
+
+
+def test_an_image_named_like_a_path_cannot_escape_the_work_dir(client, sample_document):
+    files = [
+        ("document", ("cv.json", json.dumps(sample_document), "application/json")),
+        ("template", ("t.tex.jinja", IMAGE_TEMPLATE, "text/plain")),
+        ("images", ("../../etc/logo.png", b"\x89PNG", "image/png")),
+    ]
+    # Not a 400: the name is reduced to 'logo.png', which is a name like any
+    # other. What must never happen is a write outside the scratch directory.
+    response = client.post("/v1/cv/render", files=files)
+    assert response.status_code in (200, 422)
+    assert not Path("/etc/logo.png").exists()
+
+
+def test_a_request_cannot_carry_unlimited_images(client, sample_document):
+    files = [("document", ("cv.json", json.dumps(sample_document), "application/json"))]
+    files += [("images", (f"img{n}.png", b"x", "image/png")) for n in range(MAX_IMAGES + 1)]
+
+    response = client.post("/v1/cv/render", files=files)
+    assert response.status_code == 400
+    assert "too many images" in response.json()["error"]

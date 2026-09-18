@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..api import HttpApi, JobstitchError, read_bytes, read_text
+from ..api import HttpApi, JobstitchError, read_text
 from ..config import Config
 from ..joblog import format_entries
 from ..ui import fail
@@ -26,17 +26,16 @@ def run(config: Config, source: Path, *, output: Path | None = None) -> int:
 
     api = HttpApi(config.server_url, token=config.token, verbose=config.verbose)
     template = read_text(config.path("resume.tex.jinja"))
-    signature = read_bytes(config.path("candidate_signature.png"))
+    images = config.image_parts()
 
     try:
         if source.suffix == ".tex":
-            envelope = api.render(tex=source.read_text(encoding="utf-8"),
-                                  signature=signature)
+            envelope = api.render(tex=source.read_text(encoding="utf-8"), images=images)
         elif source.suffix == ".json":
             # Not validated here: the server is the one that has to be able to
             # render it, and it says so with a stage and a cause.
             document = json.loads(source.read_text(encoding="utf-8"))
-            envelope = api.render(document=document, template=template, signature=signature)
+            envelope = api.render(document=document, template=template, images=images)
         else:
             fail(f"render takes a .tex or a .json file, not {source.suffix or 'a directory'}")
     except JobstitchError as exc:

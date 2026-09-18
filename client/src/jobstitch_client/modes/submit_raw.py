@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from jobstitch_contracts import RenderedCV
 
@@ -22,7 +22,8 @@ from ..ui import fail
 SUFFIXES = (".pdf", ".json", ".tex")
 
 
-def run(config: Config, jd_file: Path, outputs: List[Path]) -> int:
+def run(config: Config, jd_file: Path, outputs: List[Path], *,
+        resume: Optional[str] = None) -> int:
     jd_file = Path(jd_file).expanduser()
     if not jd_file.is_file():
         fail(f"no such file: {jd_file}")
@@ -33,7 +34,7 @@ def run(config: Config, jd_file: Path, outputs: List[Path]) -> int:
     api = HttpApi(config.server_url, token=config.token, verbose=config.verbose)
     try:
         _, rendered = write_cv(
-            api, config, jd_file.read_text(encoding="utf-8"), say=_say
+            api, config, jd_file.read_text(encoding="utf-8"), say=_say, resume=resume
         )
     except JobstitchError as exc:
         where = f" (request {exc.request_id})" if exc.request_id else ""

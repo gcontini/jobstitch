@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-from .discovery import discover_files, find_config
+from .discovery import discover_files, discover_images, find_config
 
 #: What --cover-letter accepts.
 COVER_LETTER_MODES = ("no", "yes", "letter_only")
@@ -27,7 +27,6 @@ CONFIG_KEYS = {
     "profile": "candidate_profile.json",
     "candidate_data": "candidate_data.json",
     "preferences": "candidate_preferences.md",
-    "signature": "candidate_signature.png",
     "template": "resume.tex.jinja",
     "prompt_cv": "sys_prompt_cv.txt",
     "prompt_highlight": "sys_prompt_highlight.txt",
@@ -66,6 +65,8 @@ class Config:
     verbose: bool = False
     #: Known file name -> where it was found. Missing means "server default".
     files: Mapping[str, Path] = field(default_factory=dict)
+    #: Image file name -> where it was found. Sent under exactly that name.
+    images: Mapping[str, Path] = field(default_factory=dict)
     #: Where the config came from, for the startup summary.
     config_path: Optional[Path] = None
 
@@ -82,6 +83,10 @@ class Config:
                 f"folder, or name it in {self.config_path or 'jobstitch.toml'}."
             )
         return path
+
+    def image_parts(self) -> Dict[str, bytes]:
+        """The images to send, by the name the template includes them under."""
+        return {name: path.read_bytes() for name, path in self.images.items()}
 
     def prompt_overrides(self) -> Dict[str, str]:
         """The CV prompts the user supplied, as multipart parts."""
@@ -134,6 +139,7 @@ def load_config(
         debug=bool(raw.get("debug", Config.debug)),
         verbose=bool(raw.get("verbose", Config.verbose)),
         files=files,
+        images=discover_images(data_dir),
         config_path=path,
     )
 
