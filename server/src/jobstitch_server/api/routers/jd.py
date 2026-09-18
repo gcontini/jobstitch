@@ -47,7 +47,7 @@ async def analyze_jd(
         None, description="candidate_profile.json — the match score is against this"
     ),
     pers_preferences: Optional[UploadFile] = File(
-        None, description="pers_preferences.md — scored into pers_preference_score"
+        None, description="candidate_preferences.md — scored into pers_preference_score"
     ),
     pers_preferences_text: Optional[str] = Form(None, description="…or the same as a field"),
     temperature: Optional[float] = Form(None, description="Sampling temperature override"),

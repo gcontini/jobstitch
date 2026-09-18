@@ -193,7 +193,7 @@ Scores a posting against your profile and extracts its facts.
 ```bash
 curl -F jd=@JD.txt \
      -F candidate_profile=@candidate_profile.json \
-     -F pers_preferences=@pers_preferences.md \
+     -F pers_preferences=@candidate_preferences.md \
      localhost:8080/v1/jd/analysis
 ```
 

@@ -99,7 +99,7 @@ def make_runner(api, tmp_path):
             server_url="http://server.invalid",
             debug=debug,
             files={name: EXAMPLE / name for name in (
-                "candidate_profile.json", "candidate_data.json", "pers_preferences.md",
+                "candidate_profile.json", "candidate_data.json", "candidate_preferences.md",
                 "candidate_signature.png")},
         )
         return JobRunner(api=api, workspace=workspace, config=config,

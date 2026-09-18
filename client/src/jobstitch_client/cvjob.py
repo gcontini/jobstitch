@@ -38,17 +38,19 @@ def write_cv(
         signature=read_bytes(config.path("candidate_signature.png")),
         temperature=config.temperature,
     ).request_id
+    if config.verbose:
+        say(f"   request id: {request_id} (jobstitch logs {request_id})")
 
     deadline = time.monotonic() + config.timeout
     seen_status, seen_detail = "", ""
     while True:
         status = api.cv_status(request_id).data
-        if status.status != seen_status:
-            seen_status = status.status
-            say(f"   {status.status}")
         if config.verbose and status.detail and status.detail != seen_detail:
             seen_detail = status.detail
             say(status.detail)
+        if status.status != seen_status:
+            seen_status = status.status
+            say(f"   {status.status}")
         if status.status == "END":
             return request_id, api.cv_result(request_id).data
         if time.monotonic() > deadline:

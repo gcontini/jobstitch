@@ -36,7 +36,7 @@ def candidate(candidate_data) -> CandidateInputs:
     """The fictional Jordan Rivera set, as a client would post it."""
     return CandidateInputs(
         profile=json.loads((EXAMPLE_CANDIDATE / "candidate_profile.json").read_text()),
-        preferences=(EXAMPLE_CANDIDATE / "pers_preferences.md").read_text(),
+        preferences=(EXAMPLE_CANDIDATE / "candidate_preferences.md").read_text(),
         data=candidate_data,
     )
 

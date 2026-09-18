@@ -22,7 +22,7 @@ from .ui import fail
 
 EPILOGUE = """\
 files:
-  Put candidate_profile.json, candidate_data.json, pers_preferences.md and
+  Put candidate_profile.json, candidate_data.json, candidate_preferences.md and
   candidate_signature.png in the current folder and they are picked up by
   name. A prompt or resume.tex.jinja found there overrides the server's
   default; anything absent falls back to it.

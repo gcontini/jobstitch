@@ -26,7 +26,7 @@ COVER_LETTER_MODES = ("no", "yes", "letter_only")
 CONFIG_KEYS = {
     "profile": "candidate_profile.json",
     "candidate_data": "candidate_data.json",
-    "preferences": "pers_preferences.md",
+    "preferences": "candidate_preferences.md",
     "signature": "candidate_signature.png",
     "template": "resume.tex.jinja",
     "prompt_cv": "sys_prompt_cv.txt",

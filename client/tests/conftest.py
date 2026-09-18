@@ -159,7 +159,7 @@ def config() -> Config:
         server_url="http://test.invalid",
         files={name: EXAMPLE_CANDIDATE / name for name in (
             "candidate_profile.json", "candidate_data.json",
-            "pers_preferences.md", "candidate_signature.png")},
+            "candidate_preferences.md", "candidate_signature.png")},
     )
 
 

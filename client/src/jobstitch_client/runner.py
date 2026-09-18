@@ -155,7 +155,7 @@ class JobRunner:
         analysis = self._call(log, lambda: self.api.analyze(
             candidate.text,
             profile=self.config.require("candidate_profile.json").read_bytes(),
-            preferences=self.config.require("pers_preferences.md").read_text(encoding="utf-8"),
+            preferences=self.config.require("candidate_preferences.md").read_text(encoding="utf-8"),
             temperature=self.config.temperature,
         ))
 

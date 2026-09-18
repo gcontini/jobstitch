@@ -22,7 +22,7 @@ your own and no LaTeX install.
    |---|---|
    | `candidate_profile.json` | Everything you have ever done. The model tailors the CV from this — the more complete, the better. **Required.** |
    | `candidate_data.json` | Name, email, phone, LinkedIn, languages, location, education. Merged into the CV here and printed as-is; **Required.** |
-   | `pers_preferences.md` | What you want from a job, in prose. Scored against each posting. **Required** for analysis. |
+   | `candidate_preferences.md` | What you want from a job, in prose. Scored against each posting. **Required** for analysis. |
    | `candidate_signature.png` | Your signature image. Optional — a blank one is used otherwise. |
    | `resume.tex.jinja` | Your own LaTeX template. Optional — the server's is used otherwise. |
    | `sys_prompt_cv.txt`, `sys_prompt_highlight.txt`, `sys_prompt_review.txt`, `sys_prompt_letter.txt` | Your own prompts. Optional, same. |
@@ -58,7 +58,7 @@ Everything resolves in this order: **command line → environment →
 [files]
 profile      = "~/cv/candidate_profile.json"
 candidate_data = "~/cv/candidate_data.json"
-preferences  = "~/cv/pers_preferences.md"
+preferences  = "~/cv/candidate_preferences.md"
 signature    = "~/cv/signature.png"
 template     = "~/cv/my_resume.tex.jinja"
 prompt_cv    = "~/cv/prompts/cv.txt"
@@ -232,7 +232,7 @@ finished, `jobstitch logs <request id>`.
 ## What leaves your machine
 
 Per request: the posting text, your `candidate_profile.json`, your
-`pers_preferences.md` (for the analysis), your `candidate_data.json` and your
+`candidate_preferences.md` (for the analysis), your `candidate_data.json` and your
 signature image if you have one. Whether *the model provider* keeps what it is
 shown is between you and whoever runs the server — the same question as with
 any hosted model.

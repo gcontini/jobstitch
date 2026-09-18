@@ -16,7 +16,7 @@ from typing import Dict, List, Optional
 KNOWN_FILES = (
     "candidate_profile.json",
     "candidate_data.json",
-    "pers_preferences.md",
+    "candidate_preferences.md",
     "candidate_signature.png",
     "resume.tex.jinja",
     "sys_prompt_cv.txt",

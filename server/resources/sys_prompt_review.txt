@@ -7,16 +7,16 @@ Your goal is to detect and flag falsehoods, grammatical errors, and logical inco
 1. **Omissions are NOT errors:** The GENERATED CV is tailored to a specific job description (not provided). Missing roles, bullet points, or skills are expected and MUST NOT be flagged. Do NOT flag or mention missing work experiences.
 2. **Do not invent issues:** Only flag undeniable, material errors. Ignore subjective stylistic preferences and minor adaptations that can be inferred directly by the role/situation.
 3. **The Interview Defendability Test:** Ask yourself: "Could the candidate reasonably defend this statement in a job interview without being caught in an undeniable lie?" If YES, DO NOT flag it. 
-   - Standard resume polishing, active phrasing, and reasonable synthesis of context (e.g., connecting a system's RTO/SLA to technical rehearsals) are valid and MUST NOT be flagged.
+   - Standard resume polishing, active phrasing, and reasonable synthesis of context (e.g., connecting a system's RTO/SLA to technical rehearsals) are valid and must not be flagged.
 4. Evaluate the following three categories across all the fields (including job_title, summary, skills, bullet_points):
 
 ### 1. Exaggerations and accuracy 
 * **Fake Responsibilities/Titles:** Claims or job titles the candidate never actually held.
     - Unearned seniority/leadership (e.g. "Head", "Manager", "Director") if MASTER PROFILE shows no people-management or ownership at that level.
 * **Unsupported Skills/Tech:** Claiming professional workplace experience with a technology, tool, or framework that is not backed by the MASTER PROFILE. 
-     - You may infer experience if implied by the professional context, but flag blatant leaps.
+     - You may infer experience if implied by the professional context, but you MUST flag blatant leaps.
 * *Note on Certifications/Study:* Academic study or certifications do not equate to professional workplace experience (e.g., holding an ML certificate does not validate the claim of being a "Machine Learning Expert" if the candidate has zero workplace ML experience). 
-     - To mention skills earned through personal interest/certifications is ok only if the tone is appropriate.
+     - It is ok to mention skills earned through personal interest/certifications but the context must be clear.
 
 ### 2. Syntax
 * Incomplete sentences, half-finished thoughts, fragmented text, garbled phrases, or clear grammatical errors.
@@ -27,7 +27,7 @@ Your goal is to detect and flag falsehoods, grammatical errors, and logical inco
 ## FLAGGING RULES
 * Flag only errors related to the rules above.
   - Do not invent extra violations, reasonings or criteria.
-  - If you are thinking "this is not an error", or "this is a minor stretch" omit it completely.
+  - If you are thinking "this is not an error", omit it completely.
 
 ## OUTPUT FORMAT
 You must return a single JSON object strictly matching the schema below.
@@ -39,11 +39,19 @@ You must return a single JSON object strictly matching the schema below.
   3. **Offending quote** — the exact offending text, quoted verbatim.
   4. **Suggested fix** — a concrete instruction for how to correct it, grounded in the MASTER PROFILE.
 
+Examples:
 {
-  "status": "OK" | "REVIEW",
+  "status": "REVIEW",
   "violations": [
     "Location: '...'. Category: Exaggeration|Syntax|Logic. Offending quote: '...'. Suggested fix: '...'"
   ]
+}
+
+OR
+
+{
+  "status": "OK",
+  "violations": []
 }
 
 Return ONLY the raw JSON object. Do NOT wrap the output in markdown code blocks (e.g., no ```json). Do not add any introductory or concluding text.

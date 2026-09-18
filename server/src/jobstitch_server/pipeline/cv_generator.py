@@ -116,7 +116,7 @@ class ReviewResult(BaseModel):
     violations: List[str] = Field(
         max_length= 10,
         default_factory=list,
-        description="Specific, actionable issues the CV generator must fix when status=='REVIEW'. Empty when status=='OK'.",
+        description="Specific, actionable issues the CV generator must fix when status=='REVIEW'. Empty list when status=='OK'.",
     )
 
 
@@ -264,12 +264,18 @@ class CVGenerator:
         Raises ``ValueError`` (incl. ``json.JSONDecodeError``) or
         ``ValidationError`` when the content is missing or does not conform to
         the schema.
+        patch the model return in case.
         """
-        return parse_model_json(
+
+        review_result = parse_model_json(
             response.choices[0].message.content,
             ReviewResult,
             empty="Reviewer returned empty content",
         )
+        #remove empty and too short violations
+        review_result.violations[:] = [x for x in review_result.violations if len(x)>15] 
+        review_result.status = "OK" if len(review_result.violations) == 0 else "REVIEW"
+        return review_result
 
     def _highlight_keywords(
         self, cv_data: TailoredCVData, job_description: str
@@ -485,9 +491,10 @@ class CVGenerator:
 
         The loop is generate -> review -> render -> measure -> condense. The
         render in the middle is what makes the page limit real: the model is
-        told to cut based on an actual page count, not an estimate. After the
-        loop the keywords are highlighted once and the result is rendered for
-        good.
+        told to cut based on an actual page count, not an estimate. The review
+        runs until it passes once; condensing attempts after that only measure
+        length. After the loop the keywords are highlighted once and the result
+        is rendered for good.
 
         Returns the merged document, its LaTeX, its PDF and one line saying
         what the run cost. Raises :class:`ModelOutputError` if no attempt
@@ -517,6 +524,7 @@ class CVGenerator:
         ]
 
         final_cv_data = None
+        content_reviewed = False
         # Each report names the step starting now and what the one before it
         # cost, so one call is one complete answer to "where is my CV".
         self._report("generate")
@@ -531,55 +539,55 @@ class CVGenerator:
             mark = self._mark()
             with stage("cv.generate"):
                 cv_data = self._generate_valid_cv_data(messages)
-            self._report("review", self._cost(mark, "generation finished"))
+            self._report(
+                "review" if not content_reviewed else "page_check",
+                self._cost(mark, "generation finished"),
+            )
 
             # Content review (same model as generation): REVIEW rejects the CV
             # and its violations are fed back for regeneration on the next
-            # attempt; OK lets the CV proceed to rendering.
-            logger.info("--- content review ---")
-            mark = self._mark()
-            with stage("cv.review"):
-                review = self._review_cv_data(cv_data)
-            if review.status == "REVIEW" and not review.violations:
-                # The reviewer flagged REVIEW without any specifics — this
-                # violates its own prompt and should be rare. There is
-                # nothing actionable to feed back to the generator, so treat
-                # it as a pass rather than regenerating against a made-up
-                # instruction.
-                logger.warning(
-                    "  ⚠ Reviewer returned REVIEW with no violations — treating as OK"
-                )
-                review.status = "OK"
+            # attempt; OK lets the CV proceed to rendering. Once it passes, the
+            # only thing later attempts change is length, so it is not re-run.
+            if not content_reviewed:
+                logger.info("--- content review ---")
+                mark = self._mark()
+                with stage("cv.review"):
+                    review = self._review_cv_data(cv_data)
 
-            if review.status == "REVIEW":
-                # Print the violations the reviewer requested so they are
-                # visible in the log (they are also fed back to the generator).
-                logger.info(
-                    "  ✗ Review rejected CV (%d violation(s)) — regenerating",
-                    len(review.violations),
-                )
-                for violation in review.violations:
-                    logger.info("      - %s", violation)
-                violations_text = "\n".join(f"- {v}" for v in review.violations)
-                self._report(
-                    "re-generate",
-                    self._cost(mark, "review rejected the CV") + "\n" + violations_text,
-                )
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "Your previous CV was rejected by the content "
-                            "reviewer. Fix ALL of the following issues and "
-                            "output a single valid JSON object strictly "
-                            "matching the TailoredCVData schema:\n"
-                            f"{violations_text}"
-                        ),
-                    }
-                )
-                continue
-            logger.info("  ✓ Review OK")
-            self._report("page_check", self._cost(mark, "review passed"))
+                if review.status == "REVIEW":
+                    # Print the violations the reviewer requested so they are
+                    # visible in the log (they are also fed back to the
+                    # generator).
+                    logger.info(
+                        "  ✗ Review rejected CV (%d violation(s)) — regenerating",
+                        len(review.violations),
+                    )
+                    for violation in review.violations:
+                        logger.info("      - %s", violation)
+                    violations_text = "\n".join(f"- {v}" for v in review.violations)
+                    self._report(
+                        "re-generate",
+                        self._cost(mark, "review rejected the CV")
+                        + "\n"
+                        + violations_text,
+                    )
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your previous CV was rejected by the content "
+                                "reviewer. Fix ALL of the following issues and "
+                                "output a single valid JSON object strictly "
+                                "matching the TailoredCVData schema:\n"
+                                f"{violations_text}"
+                            ),
+                        }
+                    )
+                    continue
+
+                logger.info("  ✓ Review OK")
+                content_reviewed = True
+                self._report("page_check", self._cost(mark, "review passed"))
 
             logger.info("--- render %d ---", attempt + 1)
             with stage("render"):
