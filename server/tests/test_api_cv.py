@@ -146,6 +146,18 @@ def test_the_status_reports_each_step_and_what_it_cost(client, fake_models, part
 
 
 @needs_latex
+def test_pages_is_forwarded_to_the_page_check(client, fake_models, parts):
+    """A ``pages`` override reaches the generator's page check, not just the
+    default of 2 — proving the whole client-to-page-check chain is wired."""
+    a_good_run(fake_models)
+    request_id = start_cv(client, parts, pages=1)
+    final = wait_for_job(client, request_id).json()["data"]
+
+    assert final["status"] == "END"
+    assert "1 page(s)" in final["detail"]
+
+
+@needs_latex
 def test_the_scratch_directory_goes_and_the_record_stays(client, fake_models, parts, app_state):
     a_good_run(fake_models)
     request_id = start_cv(client, parts)
@@ -250,6 +262,12 @@ def test_a_missing_personal_part_is_a_400(client, parts, dropped):
 def test_an_unparsable_personal_part_is_a_400(client, parts, broken):
     files = {**parts, broken: ("p.json", "{not json", "application/json")}
     response = client.post("/v1/cv", data={"jd_text": "jd"}, files=files)
+    assert response.status_code == 400
+    assert "bad_part" in response.json()["error"]
+
+
+def test_a_non_positive_pages_is_a_400(client, parts):
+    response = client.post("/v1/cv", data={"jd_text": "jd", "pages": 0}, files=parts)
     assert response.status_code == 400
     assert "bad_part" in response.json()["error"]
 

@@ -12,6 +12,7 @@ poll a CV job, and to fetch what the server actually did from ``/logs``.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Protocol
@@ -25,12 +26,17 @@ from jobstitch_contracts import (
     JDDetection,
     RenderedCV,
     RequestLog,
+    ServerStatus,
 )
 
 #: No call blocks for long any more — a CV job is polled, not waited on — but
 #: a render still has to sit through pdflatex.
 REQUEST_TIMEOUT = 180.0
 CONNECT_TIMEOUT = 10.0
+
+#: How many times to knock on /healthz before giving up on a cold server.
+HEALTH_ATTEMPTS = 3
+HEALTH_RETRY_DELAY = 2.0
 
 
 class JobstitchError(RuntimeError):
@@ -65,6 +71,7 @@ class JobstitchApi(Protocol):
         self, text: str, *, profile: bytes, candidate_data: bytes,
         prompts: Optional[Mapping[str, str]] = None, template: Optional[str] = None,
         signature: Optional[bytes] = None, temperature: Optional[float] = None,
+        pages: Optional[int] = None,
     ) -> Envelope[None]: ...
 
     def cv_status(self, request_id: str) -> Envelope[CVStatus]: ...
@@ -91,7 +98,10 @@ class HttpApi:
     #: Injection point for tests: a client that reaches the app in-process,
     #: so both halves are exercised together with no socket.
     client: Optional[httpx.Client] = None
+    #: --verbose: report each /healthz attempt while the server wakes up.
+    verbose: bool = False
     _client: httpx.Client = field(init=False, repr=False)
+    _health_checked: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
@@ -111,9 +121,11 @@ class HttpApi:
         return self._get(f"/logs/{request_id}", RequestLog)
 
     def detect(self, text: str) -> Envelope[JDDetection]:
+        self._ensure_healthy()
         return self._post("/v1/jd/detect", JDDetection, data={"jd_text": text})
 
     def analyze(self, text, *, profile, preferences, temperature=None):
+        self._ensure_healthy()
         return self._post(
             "/v1/jd/analysis", JDAnalysis,
             data=_clean({"jd_text": text, "pers_preferences_text": preferences,
@@ -123,7 +135,7 @@ class HttpApi:
         )
 
     def create_cv(self, text, *, profile, candidate_data, prompts=None, template=None,
-                  signature=None, temperature=None):
+                  signature=None, temperature=None, pages=None):
         """Start a CV job. The envelope's ``request_id`` is the job's handle.
 
         ``candidate_data`` goes with it because the server renders the CV to
@@ -140,8 +152,10 @@ class HttpApi:
             files["template"] = ("resume.tex.jinja", template, "text/plain")
         if signature is not None:
             files["signature"] = ("candidate_signature.png", signature, "image/png")
+        self._ensure_healthy()
         return self._post("/v1/cv", type(None),
-                          data=_clean({"jd_text": text, "temperature": temperature}),
+                          data=_clean({"jd_text": text, "temperature": temperature,
+                                       "pages": pages}),
                           files=files)
 
     def cv_status(self, request_id: str) -> Envelope[CVStatus]:
@@ -175,6 +189,33 @@ class HttpApi:
                           files=files)
 
     # --- plumbing -----------------------------------------------------------
+    def _ensure_healthy(self) -> None:
+        """Before the first real call: make sure the server is up.
+
+        A freshly started server can take a moment to become reachable, so
+        this knocks on ``/healthz`` a few times rather than failing on the
+        first refused connection. Checked once per client, not once per call.
+        """
+        if self._health_checked:
+            return
+        last_error: Optional[JobstitchError] = None
+        for attempt in range(1, HEALTH_ATTEMPTS + 1):
+            if self.verbose:
+                print(f"spinning up the server attempt {attempt}/{HEALTH_ATTEMPTS}")
+            try:
+                self._get("/healthz", ServerStatus)
+                self._health_checked = True
+                return
+            except JobstitchError as exc:
+                last_error = exc
+                if attempt < HEALTH_ATTEMPTS:
+                    time.sleep(HEALTH_RETRY_DELAY)
+        raise JobstitchError(
+            f"the jobstitch server at {self.base_url} did not come up after "
+            f"{HEALTH_ATTEMPTS} attempts: {last_error}",
+            status=last_error.status if last_error else 0,
+        )
+
     def _get(self, path: str, payload: type) -> Envelope:
         return self._send("GET", path, payload)
 

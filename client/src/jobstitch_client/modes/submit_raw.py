@@ -30,7 +30,7 @@ def run(config: Config, jd_file: Path, outputs: List[Path]) -> int:
         if target.suffix not in SUFFIXES:
             fail(f"-o takes a {', '.join(SUFFIXES)} file, not {target.name}")
 
-    api = HttpApi(config.server_url, token=config.token)
+    api = HttpApi(config.server_url, token=config.token, verbose=config.verbose)
     try:
         _, rendered = write_cv(
             api, config, jd_file.read_text(encoding="utf-8"), say=_say

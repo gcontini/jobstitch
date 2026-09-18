@@ -206,8 +206,9 @@ against your stated preferences.
 ### `POST /v1/cv` → `GET /v1/cv/{id}/status` → `GET /v1/cv/{id}`
 
 The expensive one: minutes of model calls. It writes the CV, reviews it
-against your profile, renders it, condenses it until it fits two pages,
-highlights the keywords and renders it for good.
+against your profile, renders it, condenses it until it fits the page limit
+(2 by default, or `pages` in the request), highlights the keywords and
+renders it for good.
 
 It does not wait. The `POST` answers **`202`** with the job's id, you poll for
 the status, and you collect everything at the end:
@@ -231,8 +232,9 @@ curl -s localhost:8080/v1/cv/$ID > cv.json # once it says END
 | `template` | optional | Replace `resume.tex.jinja` |
 | `signature` | optional | Your signature PNG |
 | `temperature` | optional | Tuning |
+| `pages` | optional | Page limit the CV must fit. Default: 2. |
 
-**Why it needs `candidate_data`, and the template.** The two-page limit is
+**Why it needs `candidate_data`, and the template.** The page limit is
 enforced by actually compiling the CV and counting the pages, so the
 instruction fed back to the model ("remove one bullet point") is grounded in a
 real overflow. A page count taken with a different template, or with the

@@ -24,7 +24,7 @@ def run(config: Config, source: Path, *, output: Path | None = None) -> int:
     if not source.is_file():
         fail(f"no such file: {source}")
 
-    api = HttpApi(config.server_url, token=config.token)
+    api = HttpApi(config.server_url, token=config.token, verbose=config.verbose)
     template = read_text(config.path("resume.tex.jinja"))
     signature = read_bytes(config.path("candidate_signature.png"))
 

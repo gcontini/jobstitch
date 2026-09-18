@@ -14,7 +14,7 @@ from ..ui import fail
 
 
 def run(config: Config, request_id: str) -> int:
-    api = HttpApi(config.server_url, token=config.token)
+    api = HttpApi(config.server_url, token=config.token, verbose=config.verbose)
     try:
         envelope = api.logs(request_id)
     except JobstitchError as exc:

@@ -57,6 +57,8 @@ def global_options() -> argparse.ArgumentParser:
                         help="Bearer token, if the server requires one.")
     common.add_argument("--temperature", type=float, default=argparse.SUPPRESS,
                         help="Sampling temperature override.")
+    common.add_argument("--pages", type=int, default=argparse.SUPPRESS,
+                        help="Page limit the CV must fit (default: 2).")
     common.add_argument("-d", "--debug", action="store_true", default=argparse.SUPPRESS,
                         help="Fetch the server's log for every call, not only failures.")
     common.add_argument("-v", "--verbose", action="store_true", default=argparse.SUPPRESS,
@@ -137,6 +139,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "server_url": flag("server"),
                 "token": flag("token"),
                 "temperature": flag("temperature"),
+                "pages": flag("pages"),
                 "cover_letter": getattr(args, "cover_letter", None),
                 "debug": flag("debug"),
                 "verbose": flag("verbose"),

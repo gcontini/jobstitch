@@ -61,10 +61,13 @@ async def create_cv(
     ),
     signature: Optional[UploadFile] = File(None, description="candidate_signature.png"),
     temperature: Optional[float] = Form(None, description="Sampling temperature override"),
+    pages: Optional[int] = Form(None, description="Page limit the CV must fit (default: 2)"),
 ) -> dict:
     """Accept one CV job. The id in the envelope is the handle for the rest."""
     state = get_state(request)
     limit = state.settings.max_part_bytes
+    if pages is not None and pages < 1:
+        raise BadPart("pages must be at least 1")
 
     job_description = await text_part(jd, jd_text, name="jd", max_bytes=limit, required=True)
     profile = await json_part(
@@ -101,6 +104,7 @@ async def create_cv(
             max_attempts=state.settings.max_attempts,
             deadline=time.monotonic() + state.settings.request_budget_seconds,
             latex_timeout=state.settings.latex_timeout,
+            page_limit=pages,
             progress=progress,
         ).generate(job_description)
 

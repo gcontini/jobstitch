@@ -162,6 +162,7 @@ reasonably soon; an id that has been dropped gives `404`.
 | `--yes` | clipboard, watch, submit | Submit every valid posting without asking. Unattended runs spend tokens on their own. |
 | `--no-xlsx` | clipboard, watch, submit | Do not record delivered CVs in the spreadsheet. |
 | `--server`, `--token`, `--temperature` | all | Override the config for one run. |
+| `--pages N` | clipboard, watch, submit, submit-raw | Page limit the CV must fit. Default: 2. |
 | `--config FILE`, `--data-dir DIR` | all | Use a specific config, or look for your files somewhere else. |
 | `-d`, `--debug` | all | Fetch the server's log after **every** call and fold it into `log.log`. Without it only failures are fetched. |
 | `-v`, `--verbose` | all | While a CV is being written, print what the server reports about each step it finishes — tokens, thinking tokens, elapsed, and the reviewer's or the page check's own words. |

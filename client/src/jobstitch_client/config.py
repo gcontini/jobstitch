@@ -55,6 +55,8 @@ class Config:
     server_url: str = "http://localhost:8080"
     token: Optional[str] = None
     temperature: Optional[float] = None
+    #: Page limit the CV must fit. None means the server's default.
+    pages: Optional[int] = None
     cover_letter: str = "no"
     #: How long to wait for a CV job before giving up on it.
     timeout: float = 1800.0
@@ -126,6 +128,7 @@ def load_config(
         server_url=raw.get("server_url", Config.server_url),
         token=raw.get("token"),
         temperature=raw.get("temperature"),
+        pages=raw.get("pages"),
         cover_letter=raw.get("cover_letter", Config.cover_letter),
         timeout=float(raw.get("timeout", Config.timeout)),
         debug=bool(raw.get("debug", Config.debug)),

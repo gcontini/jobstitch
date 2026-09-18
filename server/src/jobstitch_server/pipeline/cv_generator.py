@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field, ValidationError
 from ..bundle import CandidateInputs, ResourceBundle
 from ..model_selector import ModelSelector
 from ..observability import LOGGER_ROOT, stage
-from .cv_renderer import PAGE_LIMIT, CVRenderer, RenderResult
+from .cv_renderer import CVRenderer, RenderResult
 from .cv_schema import TailoredCVData, prompt_schema
 from .errors import BudgetExceededError, ModelOutputError
 from .parsing import parse_model_json
@@ -166,6 +166,7 @@ class CVGenerator:
         max_validation_attempts: int = 3,
         deadline: Optional[float] = None,
         latex_timeout: Optional[float] = None,
+        page_limit: Optional[int] = None,
         progress: Optional[ProgressFn] = None,
     ) -> None:
         self.cv_model = cv_model
@@ -184,6 +185,8 @@ class CVGenerator:
         renderer_kwargs: Dict[str, Any] = {}
         if latex_timeout is not None:
             renderer_kwargs["latex_timeout"] = latex_timeout
+        if page_limit is not None:
+            renderer_kwargs["page_limit"] = page_limit
         self.renderer = CVRenderer(
             template_source=bundle.template_source,
             template_name=bundle.template_name,
@@ -595,7 +598,7 @@ class CVGenerator:
             final_cv_data = cv_data
             logger.info("  Page check: %d pages -> %s", result.pages, result.advice)
 
-            if result.pages <= PAGE_LIMIT:
+            if result.pages <= self.renderer.page_limit:
                 logger.info("  ✓ Length OK (%d pages)", result.pages)
                 self._report("highlight", f"page check passed: {result.pages} page(s)")
                 break

@@ -196,3 +196,24 @@ def test_page_check_escalates_its_advice(monkeypatch, tmp_path):
     assert "EXTREMELY long" in check_pdf_pages(tmp_path / "x.pdf")["description"]
     reader_with(0, 0)
     assert check_pdf_pages(tmp_path / "x.pdf")["description"] == "length OK"
+
+
+def test_page_check_honors_a_custom_limit(monkeypatch, tmp_path):
+    """A caller asking for fewer pages gets advice scoped to that limit."""
+
+    class FakePage:
+        def __init__(self, n): self.n = n
+        def extract_text(self): return "\n".join(f"line {i}" for i in range(self.n))
+
+    class FakeReader:
+        def __init__(self, pages): self.pages = pages
+
+    monkeypatch.setattr(
+        "jobstitch_server.pipeline.cv_renderer.PdfReader",
+        lambda p: FakeReader([FakePage(0), FakePage(1)]),
+    )
+    result = check_pdf_pages(tmp_path / "x.pdf", limit=1)
+    assert result["description"] != "length OK"
+    assert "1 page limit" in result["description"]
+    # range(limit, pages) must start at the limit, not the old hardcoded 2.
+    assert "page_2_lines" in result

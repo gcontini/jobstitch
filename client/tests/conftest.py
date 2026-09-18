@@ -113,13 +113,14 @@ class FakeApi:
         return envelope(self.analysis)
 
     def create_cv(self, text, *, profile, candidate_data, prompts=None, template=None,
-                  signature=None, temperature=None):
+                  signature=None, temperature=None, pages=None):
         self._record("create_cv")
         self.seen_prompts = dict(prompts or {})
         self.seen_template = template
         self.seen_signature = signature
         self.seen_temperature = temperature
         self.seen_candidate_data = candidate_data
+        self.seen_pages = pages
         return Envelope(request_id="test-request", ok=True)
 
     def cv_status(self, request_id):

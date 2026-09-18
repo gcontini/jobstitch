@@ -74,11 +74,13 @@ class CVRenderer:
         assets: Optional[Mapping[str, bytes]] = None,
         work_dir: Path,
         latex_timeout: float = DEFAULT_LATEX_TIMEOUT,
+        page_limit: int = PAGE_LIMIT,
     ) -> None:
         self.template_name = template_name
         self.assets = dict(assets or {})
         self.work_dir = Path(work_dir)
         self.latex_timeout = latex_timeout
+        self.page_limit = page_limit
 
         # A fresh environment per renderer: the template is per-request input,
         # so a shared or cached one would serve someone else's template.
@@ -199,7 +201,7 @@ class CVRenderer:
         tex_path.write_text(tex, encoding="utf-8")
 
         pdf_path = self._run_pdflatex(tex_path)
-        info = check_pdf_pages(pdf_path)
+        info = check_pdf_pages(pdf_path, limit=self.page_limit)
         return RenderResult(
             tex=tex,
             pdf=pdf_path.read_bytes(),
@@ -283,7 +285,7 @@ class CVRenderer:
         return text.replace(str(self.work_dir), "<work>")
 
 
-def check_pdf_pages(pdf_path: Path) -> Dict[str, Any]:
+def check_pdf_pages(pdf_path: Path, limit: int = PAGE_LIMIT) -> Dict[str, Any]:
     """Page count plus, when it is too long, what to cut.
 
     The ``description`` is fed back to the model verbatim as the next user
@@ -297,12 +299,12 @@ def check_pdf_pages(pdf_path: Path) -> Dict[str, Any]:
 
     result: Dict[str, Any] = {"pages": pages}
 
-    if pages <= PAGE_LIMIT:
+    if pages <= limit:
         desc = "length OK"
     else:
-        # Count non-empty text lines on each overflowing page (page 3 onward).
+        # Count non-empty text lines on each overflowing page (past the limit).
         overflow_lines: Dict[str, int] = {}
-        for idx in range(2, pages):
+        for idx in range(limit, pages):
             text = reader.pages[idx].extract_text() or ""
             lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
             overflow_lines[f"page_{idx + 1}_lines"] = len(lines)
@@ -312,7 +314,7 @@ def check_pdf_pages(pdf_path: Path) -> Dict[str, Any]:
         desc=""
         if(total_overflow <= 2):
             desc = (
-                f"PDF is rejected because it is too long. PDF is {pages} pages, the mandatory 2 page limit was exceeded. Slight overflow detected."
+                f"PDF is rejected because it is too long. PDF is {pages} pages, the mandatory {limit} page limit was exceeded. Slight overflow detected."
                 f"Excess {total_overflow} lines across all the pages. "
                 f"Condense summary, REMOVE 1 bullet point. In total be sure to remove more than {(total_overflow * 90)} characters."
             )

@@ -15,6 +15,9 @@ cover_letter = "no"
 # Sampling temperature for the CV and the analysis. Omit for the server's own.
 # temperature = 0.4
 
+# Page limit the CV must fit. Omit for the server's own default (2).
+# pages = 2
+
 # How long to wait for a CV, in seconds. Writing one takes minutes.
 # timeout = 1800    # seconds to keep polling a CV job before giving up
 

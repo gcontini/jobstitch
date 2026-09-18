@@ -37,6 +37,7 @@ def write_cv(
         template=read_text(config.path("resume.tex.jinja")),
         signature=read_bytes(config.path("candidate_signature.png")),
         temperature=config.temperature,
+        pages=config.pages,
     ).request_id
     if config.verbose:
         say(f"   request id: {request_id} (jobstitch logs {request_id})")
