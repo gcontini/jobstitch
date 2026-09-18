@@ -60,6 +60,22 @@ def _raw_excerpt(content: Optional[str]) -> str:
     )
 
 
+def _retry_prompt(cv_data: TailoredCVData, why: str, instruction: str) -> str:
+    """The CV to improve on, and what to do to it, for the next round.
+
+    A rejected CV comes back as material in a fresh prompt rather than as the
+    model's own previous turn: told to fix its own reply, the model copy-edits
+    it — carrying over whatever was wrong with it — instead of writing a CV.
+    """
+    return (
+        "\n--------------------------------------------\n"
+        f"YOUR PREVIOUS ATTEMPT, {why}:\n"
+        f"{cv_data.model_dump_json(indent=2)}\n"
+        "--------------------------------------------\n"
+        f"{instruction}"
+    )
+
+
 def _reply_diagnostics(response) -> str:
     """Why a reply could not be used, beyond the validation error itself.
 
@@ -355,15 +371,22 @@ class CVGenerator:
 
         return cv_data  # unreachable: loop always returns on its last iteration
 
-    def _generate_valid_cv_data(self, messages: List[Dict[str, Any]]) -> TailoredCVData:
-        """Generate and schema-validate :class:`TailoredCVData`.
+    def _generate_valid_cv_data(self, prompt: str) -> TailoredCVData:
+        """Generate and schema-validate :class:`TailoredCVData` for one prompt.
 
-        Runs up to ``max_validation_attempts`` calls against
-        ``cv_model`` (json_schema ``response_format``), feeding the
-        validation errors back to the LLM until the output is valid. Raises
-        ``RuntimeError`` when no valid payload is produced. ``messages`` is
-        mutated in place (assistant + error-feedback turns are appended).
+        Runs up to ``max_validation_attempts`` calls against ``cv_model``
+        (json_schema ``response_format``), feeding the validation errors back
+        to the LLM until the output is valid. Raises ``ModelOutputError`` when
+        no valid payload is produced.
+
+        The conversation is built here and dropped on return, so only the
+        schema-correction turns ever accumulate — one round's CV never becomes
+        context for the next.
         """
+        messages: List[Dict[str, Any]] = [
+            self._system_message,
+            {"role": "user", "content": prompt},
+        ]
         for val_attempt in range(self.max_validation_attempts):
             cv = self._call(
                 self.cv_model,
@@ -527,13 +550,13 @@ class CVGenerator:
                 f"{json.dumps(self._cached_schema)}\n"
             )
 
-        messages = [
-            self._system_message,
-            {"role": "user", "content": user_prompt},
-        ]
-
         final_cv_data = None
         content_reviewed = False
+        # What the last round got wrong, appended to the task prompt for the
+        # next one. Every attempt is its own conversation: the attempts used
+        # to accumulate, and a model shown three of its own near-identical
+        # replies stops writing and starts copying them.
+        retry = ""
         # Each report names the step starting now and what the one before it
         # cost, so one call is one complete answer to "where is my CV".
         self._report("generate")
@@ -547,7 +570,7 @@ class CVGenerator:
             # schema-valid.
             mark = self._mark()
             with stage("cv.generate"):
-                cv_data = self._generate_valid_cv_data(messages)
+                cv_data = self._generate_valid_cv_data(user_prompt + retry)
             self._report(
                 "review" if not content_reviewed else "page_check",
                 self._cost(mark, "generation finished"),
@@ -580,17 +603,13 @@ class CVGenerator:
                         + "\n"
                         + violations_text,
                     )
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your previous CV was rejected by the content "
-                                "reviewer. Fix ALL of the following issues and "
-                                "output a single valid JSON object strictly "
-                                "matching the TailoredCVData schema:\n"
-                                f"{violations_text}"
-                            ),
-                        }
+                    retry = _retry_prompt(
+                        cv_data,
+                        "rejected by the content reviewer",
+                        "Rewrite it as a single valid JSON object strictly "
+                        "matching the TailoredCVData schema, fixing ALL of the "
+                        "following issues:\n"
+                        f"{violations_text}",
                     )
                     continue
 
@@ -616,7 +635,7 @@ class CVGenerator:
                 "re-generate",
                 f"page check failed: {result.pages} page(s)\n{result.advice}",
             )
-            messages.append({"role": "user", "content": result.advice})
+            retry = _retry_prompt(cv_data, "too long", result.advice)
 
         if final_cv_data is None:
             raise ModelOutputError(

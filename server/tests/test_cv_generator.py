@@ -176,6 +176,31 @@ def test_review_violations_are_fed_back_and_the_cv_regenerated(
                for call in model.calls for m in call["messages"])
 
 
+def test_a_regeneration_does_not_carry_the_previous_round_s_conversation(
+    bundle, candidate, tmp_path, no_latex
+):
+    """Each attempt is one fresh exchange. Accumulating them put three
+    near-identical CVs in front of the model, which then copy-edited its own
+    last reply — garbling and all — instead of writing a CV."""
+    model = FakeSelector(
+        cv_json(job_title="First"),
+        '{"status": "REVIEW", "violations": ["invented a job at NASA"]}',
+        cv_json(job_title="Second"),
+        '{"status": "REVIEW", "violations": ["still invented a job at NASA"]}',
+        cv_json(job_title="Third"),
+        OK_REVIEW,
+    )
+    build(bundle, candidate, tmp_path, model).generate("JD")
+
+    third = [c for c in model.calls
+             if any("Please tailor my CV" in (m["content"] or "") for m in c["messages"])][-1]
+    assert len(third["messages"]) == 2          # system + one user turn, always
+    # Only the CV it has to improve on, never the round before that.
+    last = third["messages"][-1]["content"]
+    assert last.count("YOUR PREVIOUS ATTEMPT") == 1
+    assert "Second" in last and "First" not in last
+
+
 def test_review_without_violations_is_treated_as_a_pass(bundle, candidate, tmp_path, no_latex):
     model = FakeSelector(cv_json(), '{"status": "REVIEW", "violations": []}')
     document, *_ = build(bundle, candidate, tmp_path, model).generate("JD")

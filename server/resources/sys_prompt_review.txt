@@ -28,7 +28,12 @@ Your goal is to detect and flag falsehoods, grammatical errors, and logical inco
 ## FLAGGING RULES
 * Flag only errors related to the rules above.
   - Do not invent extra violations, reasonings or criteria.
-  - If you are thinking "this is not an error", omit it completely.
+  - If you are thinking "this is not an error", "this is a minor stretch", "this may be acceptable (Interview Defendability Test)" do not flag.
+* **Batch a repeated defect into ONE violation.** If the SAME defect appears in more than two places -- the same stray prefix or leftover marker opening many strings, the same non-ASCII character throughout, the same banned word reused -- do NOT report it once per occurrence: that alone would fill the whole list and hide every other error in the CV. Report it exactly once, as a single violation:
+  - **Location** - name the affected fields collectively ("ALL skills and Work Experience bullets", "every field").
+  - **Offending quote** - the repeated pattern itself, not one whole sentence that contains it.
+  - **FIX** - ONE global instruction that removes every occurrence at once, worded so it applies to the entire CV rather than to one bullet.
+  Report the remaining, non-repeating errors as their own violations as usual.
 
 ## OUTPUT FORMAT
 You must return a single JSON object strictly matching the schema below.
@@ -37,15 +42,26 @@ You must return a single JSON object strictly matching the schema below.
 - Each string in the "violations" array must be a single, concise, actionable instruction that pinpoints exactly where and what is wrong. It MUST include, in this order:
   1. **Location** - where in the GENERATED CV the issue is, precise enough for someone to find it without re-reading the whole document (e.g. "Work Experience > Senior Engineer @ Acme > bullet 2", or "Summary").
   2. **Category** - which rule it violates: Exaggeration, Syntax, or Logic.
-  3. **Reason** - Reason of the violation, grounded in MASTER PROFILE. 
-  3. **Offending quote** - the exact offending text, quoted verbatim.
-  4. **FIX** - a concrete and actionnable instruction for how to correct it. Do not motivate or explain here: propose ONE fix (eg. "replace with '...'" or "rephrase the whole sentence excluding the 'xxx' responsiblity").
+  3. **Offending quote** - the exact offending text, quoted verbatim. Quote the shortest span that carries the error, not the whole sentence around it.
+  4. **Reason** - ONE clause, 20 words or fewer, naming the single fact in MASTER PROFILE that the quote contradicts. Do NOT argue the case: no weighing of alternatives, no "this is acceptable, however...", no listing of corroborating evidence, no repeating the FIX.
+  5. **FIX** - a concrete and actionnable instruction for how to correct it. Do not motivate or explain here: propose ONE fix (eg. "replace with '...'" or "rephrase the whole sentence excluding the 'xxx' responsiblity").
+- ONE issue per violation. If the Reason needs a second clause to cover a second problem, you are flagging two things: keep the stronger one and drop the other.
+- Keep each violation under 50 words in total. An error that takes a paragraph to justify is not undeniable -- omit it entirely.
 
 Examples:
 {
   "status": "REVIEW",
   "violations": [
     "Location: '...'. Category: Exaggeration|Syntax|Logic. Offending quote: '...'. Reason: '...'. FIX: ..."
+  ]
+}
+
+A repeated defect, batched into one violation instead of one per occurrence:
+{
+  "status": "REVIEW",
+  "violations": [
+    "Location: Summary and every Work Experience bullet. Category: Syntax. Offending quote: '—'. Reason: a non-ASCII em dash is used as a separator throughout the CV. FIX: Replace every non-ASCII character in the CV with its ASCII equivalent.",
+    "Location: Work Experience > Acme > bullet 2. Category: Exaggeration. Offending quote: 'Head of Platform'. Reason: MASTER PROFILE shows no people-management at that level. FIX: Replace with 'Senior Platform Engineer'."
   ]
 }
 
