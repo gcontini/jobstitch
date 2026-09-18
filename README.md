@@ -1,5 +1,8 @@
 # Job Stitch
 
+[![build](https://github.com/gcontini/jobstitch/actions/workflows/ci.yml/badge.svg)](https://github.com/gcontini/jobstitch/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Turn a job description and your unstructured experiences into a tailored, two-page LaTeX CV and a cover letter, using any OpenAI-compatible model.
 
 [**See what it produces →** `examples/sample_cv.pdf`](examples/sample_cv.pdf)
@@ -98,6 +101,7 @@ uv sync
 uv run pytest                   # all four suites; no API key, no network
 uv run jobstitch-api            # the server, from source
 uv run jobstitch --help         # the client, from source
+uv run --group docs mkdocs serve  # the documentation site, on :8000
 ```
 
 Tests that need `pdflatex` skip themselves without it. The engineering rules
@@ -105,14 +109,11 @@ the code follows are in [AGENTS.md](AGENTS.md).
 
 ## Known limitations
 
-- The certifications table in `resume.tex.jinja` is hardcoded LaTeX rather
-  than templated from your data — edit that block to put your own in.
 - A CV job cannot be cancelled: an abandoned one holds a slot until its own
   budget runs out. See [PLANNED-FEATURES.md](PLANNED-FEATURES.md).
 - A job id only means something to the instance holding its directory, so run
   one instance per `JOBSTITCH_WORK_DIR`.
-- One template, one page limit, one language. Bring your own `.tex.jinja` if
-  you want a different shape.
+- One template, one language. Bring your own `.tex.jinja` if you want a different shape.
 
 ## License
 

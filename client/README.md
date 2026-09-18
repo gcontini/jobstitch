@@ -223,22 +223,4 @@ finished, `jobstitch logs <request id>`.
 | You need more than the error line | Re-run with `-d`, or `jobstitch logs <request id>` while the server still has it. |
 | `working/` is not empty | A previous run stopped mid-job. `clipboard` and `watch` offer to resume or clean at startup. |
 
----
 
-## What leaves your machine
-
-Per request: the posting text, your `candidate_profile.json`, your
-`candidate_preferences.md` (for the analysis), your `candidate_data.json` and
-every image in the folder. Whether *the model provider* keeps what it is
-shown is between you and whoever runs the server — the same question as with
-any hosted model.
-
-**No model is ever shown your `candidate_data.json`.** It is sent because the
-server compiles the CV to count its pages, and a page count taken with the
-contact block missing is not the page count of the CV you will send; it goes
-to the LaTeX template and nowhere else. The server holds a finished CV in a
-directory of its own until a couple of hundred newer requests have pushed it
-out.
-
-Nothing is sent for text that fails the local length and binary checks, so a
-copied password or a screenful of code never leaves the machine.

@@ -39,7 +39,7 @@ jobs:
       - name: Start it and check it is healthy
         run: |
           docker run -d --name api -p 8080:8080 \
-            -e DASHSCOPE_API_KEY=ci -e DASHSCOPE_BASE_URL=http://invalid/v1 \
+            -e MODEL_API_KEY=ci -e MODEL_BASE_URL=http://invalid/v1 \
             jobstitch-server
           for i in $(seq 1 30); do
             curl -fsS localhost:8080/healthz && break || sleep 2
@@ -91,8 +91,8 @@ jobs:
       - name: Render a PDF through a running server
         if: runner.os == 'Linux'
         env:
-          DASHSCOPE_API_KEY: ci
-          DASHSCOPE_BASE_URL: http://invalid/v1
+          MODEL_API_KEY: ci
+          MODEL_BASE_URL: http://invalid/v1
           PORT: "8080"
         run: |
           set -eux

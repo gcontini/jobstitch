@@ -11,6 +11,7 @@
 #     uv run pytest           run all three test suites
 #     uv run jobstitch-api    start the server
 #     uv run jobstitch --help the client
+#     uv run --group docs mkdocs serve   the doc/ site, on localhost:8000
 
 [tool.uv.workspace]
 members = ["contracts", "server", "client"]
@@ -20,6 +21,9 @@ jobstitch-contracts = { workspace = true }
 
 [dependency-groups]
 dev = ["pytest>=8"]
+# The doc/ site. Material 9 is the last line that works with MkDocs 1.x, and
+# MkDocs 2.0 drops the plugin system it is built on, so both are capped.
+docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10"]
 
 [tool.pytest.ini_options]
 testpaths = ["contracts/tests", "server/tests", "client/tests", "tests"]

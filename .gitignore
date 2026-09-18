@@ -18,6 +18,10 @@ jobstitch.toml
 /jobstitch-data/*
 !/jobstitch-data/.gitkeep
 
+# --- Docs -------------------------------------------------------------------
+# The rendered site. doc/ is the source; mkdocs builds this.
+/site/
+
 # --- Python -----------------------------------------------------------------
 .venv/
 __pycache__/
