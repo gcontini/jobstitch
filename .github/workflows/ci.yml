@@ -94,6 +94,9 @@ jobs:
           MODEL_API_KEY: ci
           MODEL_BASE_URL: http://invalid/v1
           PORT: "8080"
+          # The runner's /tmp is shared and holds unreadable directories;
+          # the server should not have to scan it at all.
+          JOBSTITCH_WORK_DIR: ${{ runner.temp }}/jobstitch-work
         run: |
           set -eux
           uv run jobstitch-api &

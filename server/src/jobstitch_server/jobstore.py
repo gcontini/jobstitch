@@ -98,14 +98,21 @@ class JobStore:
         """Every directory that is one of ours, newest first.
 
         The root may be the system temp directory, so a directory only counts
-        when it is named like a request id *and* holds one of our files.
+        when it is named like a request id *and* holds one of our files — and
+        one we cannot even look inside (a shared ``/tmp`` holds other
+        processes' directories) is provably not one of ours.
         """
         found = []
         for path in self.root.glob("*"):
-            if not path.is_dir() or not SAFE_ID.match(path.name):
+            if not SAFE_ID.match(path.name):
                 continue
-            if (path / STATUS).is_file() or (path / LOG).is_file():
-                found.append(path)
+            try:
+                if not path.is_dir():
+                    continue
+                if (path / STATUS).is_file() or (path / LOG).is_file():
+                    found.append(path)
+            except OSError:
+                continue
         found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return [JobDir(p) for p in found]
 

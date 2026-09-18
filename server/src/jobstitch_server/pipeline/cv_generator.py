@@ -377,9 +377,13 @@ class CVGenerator:
 
             try:
                 cv_data = self._extract_cv_data(cv)   # parse content + validate
+                # The payload is logged on the way through, not only when it
+                # is rejected: a CV can be schema-valid and still garbled, and
+                # then this is the only record of what the model actually wrote.
                 logger.info(
                     "  ✓ Output validated against TailoredCVData "
-                    "(validation attempt %d)", val_attempt + 1,
+                    "(validation attempt %d)\n    payload: %s",
+                    val_attempt + 1, _raw_excerpt(cv.choices[0].message.content),
                 )
                 return cv_data
             except (ValueError, ValidationError) as e:
